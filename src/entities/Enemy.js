@@ -1,14 +1,23 @@
 import Phaser from 'phaser';
 import { ENEMY_TYPES, ENEMY_STATS } from '../utils/constants.js';
 
+// Mapping enemy types to texture prefixes
+const ENEMY_TEXTURES = {
+    [ENEMY_TYPES.SCOUT]: 'enemy_scout',
+    [ENEMY_TYPES.FIGHTER]: 'enemy_fighter',
+    [ENEMY_TYPES.BOMBER]: 'enemy_bomber',
+    [ENEMY_TYPES.ELITE]: 'enemy_elite'
+};
+
 export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y, type = ENEMY_TYPES.SCOUT) {
-        const textureKey = `enemy-${type}`;
-        super(scene, x, y, textureKey);
+        const texturePrefix = ENEMY_TEXTURES[type] || 'enemy_scout';
+        super(scene, x, y, `${texturePrefix}_m`);
         
         this.scene = scene;
         this.type = type;
         this.stats = ENEMY_STATS[type];
+        this.texturePrefix = texturePrefix;
         
         scene.add.existing(this);
         scene.physics.add.existing(this);
@@ -38,17 +47,28 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.formationOffset = { x: 0, y: 0 };
         
         // Visual
-        this.setScale(1.2);
+        this.setScale(0.7);
+        this.setDepth(80);
+        
+        // Current animation frame
+        this.currentFrame = `${texturePrefix}_m`;
+        this.lastVelocityX = 0;
+        
+        // Flip the sprite to face downward (enemies face player)
+        this.setFlipY(true);
         
         // World bounds collision
-        scene.physics.world.on('worldbounds', (event) => {
-            if (event.gameObject === this) {
+        scene.physics.world.on('worldbounds', (body) => {
+            if (body.gameObject === this) {
                 this.onWorldBounds();
             }
         });
     }
 
     update(time) {
+        // Update banking animation based on horizontal movement
+        this.updateBankingAnimation();
+        
         // Shooting for fighters
         if (this.stats.shoots && time > this.lastShot) {
             this.shoot();
@@ -65,10 +85,32 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.setVelocity(this.velocityX, this.velocityY);
     }
 
+    updateBankingAnimation() {
+        const velocityX = this.body ? this.body.velocity.x : 0;
+        
+        // Only update if velocity changed significantly
+        if (Math.abs(velocityX - this.lastVelocityX) < 20) return;
+        this.lastVelocityX = velocityX;
+        
+        let targetFrame = `${this.texturePrefix}_m`;
+        
+        if (velocityX < -30) {
+            targetFrame = velocityX < -80 ? `${this.texturePrefix}_l2` : `${this.texturePrefix}_l1`;
+        } else if (velocityX > 30) {
+            targetFrame = velocityX > 80 ? `${this.texturePrefix}_r2` : `${this.texturePrefix}_r1`;
+        }
+        
+        if (targetFrame !== this.currentFrame) {
+            this.currentFrame = targetFrame;
+            this.setTexture(targetFrame);
+        }
+    }
+
     shoot() {
-        const bullet = this.scene.physics.add.sprite(this.x, this.y + 20, 'bullet-enemy');
-        bullet.setVelocityY(this.stats.speed || 400);
-        bullet.setScale(1.2);
+        const bullet = this.scene.physics.add.sprite(this.x, this.y + 30, 'bullet-enemy');
+        bullet.setVelocityY(this.stats.shootInterval ? 300 : 400);
+        bullet.setScale(1);
+        bullet.setDepth(50);
         this.bullets.add(bullet);
         
         // Play shoot sound if available
@@ -92,20 +134,13 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     die() {
-        // Create explosion
-        const explosion = this.scene.add.sprite(this.x, this.y, 'explosion');
-        explosion.setScale(2);
-        explosion.setTint(0xff6600);
-        
-        // Animate explosion
-        this.scene.tweens.add({
-            targets: explosion,
-            scale: 3,
-            alpha: 0,
-            duration: 300,
-            onComplete: () => {
-                explosion.destroy();
-            }
+        // Create explosion animation
+        const explosion = this.scene.add.sprite(this.x, this.y, 'explosion1_1');
+        explosion.setScale(1);
+        explosion.setDepth(150);
+        explosion.play('explode_small');
+        explosion.on('animationcomplete', () => {
+            explosion.destroy();
         });
         
         // Play explosion sound
@@ -141,7 +176,7 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     onWorldBounds() {
         // Handle world bounds collision
-        if (this.body.blocked.down) {
+        if (this.body && this.body.blocked.down) {
             // Enemy reached bottom - damage player or remove
             this.destroy();
         }

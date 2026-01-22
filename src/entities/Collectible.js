@@ -1,9 +1,17 @@
 import Phaser from 'phaser';
 import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG } from '../utils/constants.js';
 
+// Texture mapping for collectibles
+const COLLECTIBLE_TEXTURES = {
+    [COLLECTIBLE_TYPES.COIN]: 'collectible-coin',
+    [COLLECTIBLE_TYPES.CRYSTAL]: 'collectible-crystal',
+    [COLLECTIBLE_TYPES.STAR]: 'collectible-star',
+    [COLLECTIBLE_TYPES.FORTUNE_COIN]: 'collectible-fortune'
+};
+
 export default class Collectible extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y, type = COLLECTIBLE_TYPES.COIN) {
-        const textureKey = `collectible-${type}`;
+        const textureKey = COLLECTIBLE_TEXTURES[type] || 'collectible-coin';
         super(scene, x, y, textureKey);
         
         scene.add.existing(this);
@@ -18,13 +26,14 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
         this.setVelocity(drift, this.speed);
         
         // Visual effects
-        this.setScale(1.2);
+        this.setScale(0.8);
+        this.setDepth(70);
         
         // Rotation animation
         scene.tweens.add({
             targets: this,
             rotation: Math.PI * 2,
-            duration: 1000,
+            duration: 1500,
             repeat: -1
         });
         
@@ -32,12 +41,27 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
         if (type === COLLECTIBLE_TYPES.STAR || type === COLLECTIBLE_TYPES.FORTUNE_COIN) {
             scene.tweens.add({
                 targets: this,
-                scale: 1.5,
-                duration: 500,
+                scale: 1.0,
+                duration: 400,
                 yoyo: true,
                 repeat: -1
             });
+            
+            // Add glow effect for fortune coins
+            if (type === COLLECTIBLE_TYPES.FORTUNE_COIN) {
+                this.setTint(0xffd700);
+            }
         }
+        
+        // Bobbing motion
+        scene.tweens.add({
+            targets: this,
+            y: y + 10,
+            duration: 500,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
     }
 
     update() {
@@ -53,18 +77,56 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
             this.scene.soundManager.playCollect();
         }
         
-        // Create collection effect
-        const particles = this.scene.add.particles(this.x, this.y, 'collectible-coin', {
-            speed: { min: 50, max: 100 },
-            scale: { start: 0.5, end: 0 },
-            lifespan: 300,
-            quantity: 5
-        });
+        // Show score popup
+        this.showScorePopup();
         
-        this.scene.time.delayedCall(300, () => {
-            particles.destroy();
-        });
+        // Create collection effect with particles
+        for (let i = 0; i < 8; i++) {
+            const angle = (Math.PI * 2 * i) / 8;
+            const color = this.type === COLLECTIBLE_TYPES.CRYSTAL ? 0x00bfff : 0xffd700;
+            const particle = this.scene.add.circle(this.x, this.y, 3, color);
+            particle.setDepth(100);
+            
+            const distance = Phaser.Math.Between(20, 40);
+            const targetX = this.x + Math.cos(angle) * distance;
+            const targetY = this.y + Math.sin(angle) * distance;
+            
+            this.scene.tweens.add({
+                targets: particle,
+                x: targetX,
+                y: targetY,
+                alpha: 0,
+                scale: 0,
+                duration: 300,
+                onComplete: () => {
+                    particle.destroy();
+                }
+            });
+        }
         
         this.destroy();
+    }
+
+    showScorePopup() {
+        const scoreText = this.scene.add.text(this.x, this.y - 20, `+${this.value}`, {
+            fontSize: '16px',
+            fontFamily: 'monospace',
+            color: this.type === COLLECTIBLE_TYPES.FORTUNE_COIN ? '#ffd700' : '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        scoreText.setOrigin(0.5);
+        scoreText.setDepth(150);
+        
+        this.scene.tweens.add({
+            targets: scoreText,
+            y: this.y - 50,
+            alpha: 0,
+            duration: 800,
+            ease: 'Power2',
+            onComplete: () => {
+                scoreText.destroy();
+            }
+        });
     }
 }

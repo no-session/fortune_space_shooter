@@ -92,18 +92,37 @@ export default class MenuScene extends Phaser.Scene {
     }
 
     createStarfield() {
+        // Add background image
+        this.bg = this.add.image(this.scale.width / 2, this.scale.height / 2, 'background');
+        this.bg.setDisplaySize(this.scale.width, this.scale.height);
+        this.bg.setDepth(0);
+        this.bg.setAlpha(0.7); // Slightly dimmed for menu
+        
+        // Dark overlay
+        const overlay = this.add.rectangle(
+            this.scale.width / 2, 
+            this.scale.height / 2, 
+            this.scale.width, 
+            this.scale.height, 
+            0x000000, 
+            0.3
+        );
+        overlay.setDepth(1);
+        
         this.starfieldLayers = [];
         
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 2; i++) {
             const stars = this.add.group();
-            const starCount = 50 + i * 20;
-            const speed = 20 + i * 10;
-            const size = 1 + i;
+            const starCount = 40 + i * 20;
+            const speed = 30 + i * 15;
+            const size = 1 + i * 0.5;
             
             for (let j = 0; j < starCount; j++) {
                 const x = Phaser.Math.Between(0, this.scale.width);
                 const y = Phaser.Math.Between(0, this.scale.height);
-                const star = this.add.circle(x, y, size, 0xffffff);
+                const alpha = 0.3 + Math.random() * 0.5;
+                const star = this.add.circle(x, y, size, 0xffffff, alpha);
+                star.setDepth(2);
                 stars.add(star);
             }
             

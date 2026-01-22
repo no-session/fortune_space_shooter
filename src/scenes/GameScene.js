@@ -39,6 +39,9 @@ export default class GameScene extends Phaser.Scene {
         // UI
         this.createUI();
         
+        // Initialize particle emitter for effects
+        this.particleEmitter = null;
+        
         // Start first wave
         this.waveManager.startWave(1);
         
@@ -55,19 +58,32 @@ export default class GameScene extends Phaser.Scene {
     }
 
     createStarfield() {
-        // Create multiple layers of stars for parallax effect
+        // Add scrolling background image
+        this.bg1 = this.add.image(this.scale.width / 2, this.scale.height / 2, 'background');
+        this.bg1.setDisplaySize(this.scale.width, this.scale.height);
+        this.bg1.setDepth(0);
+        
+        this.bg2 = this.add.image(this.scale.width / 2, -this.scale.height / 2, 'background');
+        this.bg2.setDisplaySize(this.scale.width, this.scale.height);
+        this.bg2.setDepth(0);
+        
+        this.bgSpeed = 50;
+        
+        // Create additional star layers for parallax effect on top
         this.starfieldLayers = [];
         
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 2; i++) {
             const stars = this.add.group();
-            const starCount = 50 + i * 20;
-            const speed = 50 + i * 30;
-            const size = 1 + i;
+            const starCount = 30 + i * 15;
+            const speed = 80 + i * 40;
+            const size = 1 + i * 0.5;
             
             for (let j = 0; j < starCount; j++) {
                 const x = Phaser.Math.Between(0, this.scale.width);
                 const y = Phaser.Math.Between(0, this.scale.height);
-                const star = this.add.circle(x, y, size, 0xffffff);
+                const alpha = 0.3 + Math.random() * 0.5;
+                const star = this.add.circle(x, y, size, 0xffffff, alpha);
+                star.setDepth(1);
                 stars.add(star);
             }
             
@@ -76,9 +92,24 @@ export default class GameScene extends Phaser.Scene {
     }
 
     updateStarfield() {
-        this.starfieldLayers.forEach((layer, index) => {
+        // Scroll background images
+        const delta = this.game.loop.delta / 1000;
+        
+        this.bg1.y += this.bgSpeed * delta;
+        this.bg2.y += this.bgSpeed * delta;
+        
+        // Reset backgrounds when they scroll off screen
+        if (this.bg1.y >= this.scale.height * 1.5) {
+            this.bg1.y = this.bg2.y - this.scale.height;
+        }
+        if (this.bg2.y >= this.scale.height * 1.5) {
+            this.bg2.y = this.bg1.y - this.scale.height;
+        }
+        
+        // Update star particles
+        this.starfieldLayers.forEach((layer) => {
             layer.stars.children.entries.forEach(star => {
-                star.y += layer.speed * (this.game.loop.delta / 1000);
+                star.y += layer.speed * delta;
                 
                 if (star.y > this.scale.height) {
                     star.y = 0;
@@ -89,15 +120,17 @@ export default class GameScene extends Phaser.Scene {
     }
 
     setupCollisions() {
-        // Player bullets vs enemies
+        // Player bullets vs enemies (check all active formations)
         this.physics.add.overlap(
             this.player.bullets,
             this.enemies,
             (bullet, enemy) => {
-                bullet.destroy();
-                enemy.takeDamage(10);
-                if (!enemy.active) {
-                    this.onEnemyKilled(enemy);
+                if (bullet.active && enemy.active) {
+                    bullet.destroy();
+                    enemy.takeDamage(10);
+                    if (enemy.health <= 0) {
+                        this.onEnemyKilled(enemy);
+                    }
                 }
             }
         );
@@ -107,8 +140,10 @@ export default class GameScene extends Phaser.Scene {
             this.player.bullets,
             this.bosses,
             (bullet, boss) => {
-                bullet.destroy();
-                boss.takeDamage(10);
+                if (bullet.active && boss.active) {
+                    bullet.destroy();
+                    boss.takeDamage(10);
+                }
             }
         );
         
@@ -117,10 +152,12 @@ export default class GameScene extends Phaser.Scene {
             this.enemyBullets,
             this.player,
             (bullet, player) => {
-                bullet.destroy();
-                player.takeDamage(10);
-                if (!player.isAlive()) {
-                    this.gameOver();
+                if (bullet.active && player.active) {
+                    bullet.destroy();
+                    player.takeDamage(10);
+                    if (!player.isAlive()) {
+                        this.gameOver();
+                    }
                 }
             }
         );
@@ -130,10 +167,12 @@ export default class GameScene extends Phaser.Scene {
             this.enemies,
             this.player,
             (enemy, player) => {
-                enemy.die();
-                player.takeDamage(20);
-                if (!player.isAlive()) {
-                    this.gameOver();
+                if (enemy.active && player.active) {
+                    enemy.die();
+                    player.takeDamage(20);
+                    if (!player.isAlive()) {
+                        this.gameOver();
+                    }
                 }
             }
         );
@@ -143,31 +182,18 @@ export default class GameScene extends Phaser.Scene {
             this.collectibles,
             this.player,
             (collectible, player) => {
-                const value = this.scoreManager.addCollectible(
-                    collectible.value,
-                    this.game.getTime()
-                );
-                collectible.collect();
-                this.updateUI();
+                if (collectible.active && player.active) {
+                    const value = this.scoreManager.addCollectible(
+                        collectible.value,
+                        this.game.getTime()
+                    );
+                    collectible.collect();
+                    this.updateUI();
+                }
             }
         );
         
-        // Boss bullets vs player
-        this.bosses.children.entries.forEach(boss => {
-            if (boss.bullets) {
-                this.physics.add.overlap(
-                    boss.bullets,
-                    this.player,
-                    (bullet, player) => {
-                        bullet.destroy();
-                        player.takeDamage(15);
-                        if (!player.isAlive()) {
-                            this.gameOver();
-                        }
-                    }
-                );
-            }
-        });
+        // Boss bullets vs player (set up in update loop for dynamic tracking)
     }
 
     createUI() {
@@ -233,7 +259,20 @@ export default class GameScene extends Phaser.Scene {
         this.formationManager.update(time);
         this.scoreManager.updateCombo();
         
-        // Update enemies
+        // Update enemies from formations
+        this.formationManager.activeFormations.forEach(formation => {
+            formation.enemies.forEach(enemy => {
+                if (enemy && enemy.active) {
+                    enemy.update(time);
+                    // Add to enemies group for collision tracking
+                    if (!this.enemies.contains(enemy)) {
+                        this.enemies.add(enemy);
+                    }
+                }
+            });
+        });
+        
+        // Update standalone enemies
         this.enemies.children.entries.forEach(enemy => {
             if (enemy && enemy.active) {
                 enemy.update(time);
@@ -244,6 +283,34 @@ export default class GameScene extends Phaser.Scene {
         this.bosses.children.entries.forEach(boss => {
             if (boss && boss.active) {
                 boss.update(time);
+                
+                // Check boss bullets vs player
+                if (boss.bullets) {
+                    this.physics.overlap(
+                        boss.bullets,
+                        this.player,
+                        (bullet, player) => {
+                            if (bullet.active && player.active) {
+                                bullet.destroy();
+                                player.takeDamage(15);
+                                if (!player.isAlive()) {
+                                    this.gameOver();
+                                }
+                            }
+                        }
+                    );
+                }
+            }
+        });
+        
+        // Track enemy bullets
+        this.enemies.children.entries.forEach(enemy => {
+            if (enemy && enemy.active && enemy.bullets) {
+                enemy.bullets.children.entries.forEach(bullet => {
+                    if (bullet && bullet.active && !this.enemyBullets.contains(bullet)) {
+                        this.enemyBullets.add(bullet);
+                    }
+                });
             }
         });
         
@@ -271,13 +338,16 @@ export default class GameScene extends Phaser.Scene {
     }
 
     onEnemyKilled(enemy) {
-        // Add to enemies group for tracking
-        if (!this.enemies.contains(enemy)) {
-            this.enemies.add(enemy);
-        }
-        
         // Add score
         this.scoreManager.addEnemyKill(enemy.points);
+        
+        // Create explosion particles
+        this.createExplosionParticles(enemy.x, enemy.y);
+        
+        // Screen shake for larger enemies
+        if (enemy.type === 'bomber' || enemy.type === 'elite') {
+            this.cameras.main.shake(100, 0.005);
+        }
         
         // Drop collectible
         if (Math.random() < enemy.dropChance) {
@@ -286,9 +356,31 @@ export default class GameScene extends Phaser.Scene {
         
         // Update wave manager
         this.waveManager.onEnemyKilled();
-        
-        // Remove from enemies group
-        this.enemies.remove(enemy);
+    }
+
+    createExplosionParticles(x, y) {
+        // Create particle explosion effect
+        for (let i = 0; i < 8; i++) {
+            const angle = (Math.PI * 2 * i) / 8;
+            const particle = this.add.circle(x, y, 3, 0xff6600);
+            particle.setDepth(100);
+            
+            const distance = Phaser.Math.Between(20, 40);
+            const targetX = x + Math.cos(angle) * distance;
+            const targetY = y + Math.sin(angle) * distance;
+            
+            this.tweens.add({
+                targets: particle,
+                x: targetX,
+                y: targetY,
+                alpha: 0,
+                scale: 0,
+                duration: 300,
+                onComplete: () => {
+                    particle.destroy();
+                }
+            });
+        }
     }
 
     dropCollectible(x, y) {
@@ -337,6 +429,39 @@ export default class GameScene extends Phaser.Scene {
     onBossDefeated() {
         this.waveManager.onBossKilled();
         this.scoreManager.addScore(5000); // Big bonus for boss
+        
+        // Big explosion effect
+        this.createBossExplosion();
+        
+        // Screen shake
+        this.cameras.main.shake(800, 0.02);
+    }
+
+    createBossExplosion() {
+        // Create multiple explosion rings
+        for (let ring = 0; ring < 3; ring++) {
+            const delay = ring * 100;
+            this.time.delayedCall(delay, () => {
+                const explosion = this.add.circle(
+                    this.scale.width / 2,
+                    this.scale.height / 4,
+                    50 + ring * 30,
+                    0xff6600
+                );
+                explosion.setDepth(200);
+                explosion.setAlpha(0.8);
+                
+                this.tweens.add({
+                    targets: explosion,
+                    scale: 3 + ring,
+                    alpha: 0,
+                    duration: 500,
+                    onComplete: () => {
+                        explosion.destroy();
+                    }
+                });
+            });
+        }
     }
 
     gameOver() {

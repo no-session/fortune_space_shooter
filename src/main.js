@@ -4,6 +4,7 @@ import MenuScene from './scenes/MenuScene.js';
 import GameScene from './scenes/GameScene.js';
 import ShopScene from './scenes/ShopScene.js';
 import GameOverScene from './scenes/GameOverScene.js';
+import PauseScene from './scenes/PauseScene.js';
 
 const config = {
     type: Phaser.AUTO,
@@ -18,7 +19,7 @@ const config = {
             debug: false
         }
     },
-    scene: [BootScene, MenuScene, GameScene, ShopScene, GameOverScene],
+    scene: [BootScene, MenuScene, GameScene, ShopScene, GameOverScene, PauseScene],
     pixelArt: true,
     scale: {
         mode: Phaser.Scale.FIT,

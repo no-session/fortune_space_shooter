@@ -68,123 +68,255 @@ export default class BootScene extends Phaser.Scene {
             assetText.destroy();
         });
 
-        // Load placeholder assets (will be replaced with actual assets)
-        this.loadPlaceholderAssets();
+        // Load all SpaceRage assets
+        this.loadSpaceRageAssets();
     }
 
-    loadPlaceholderAssets() {
-        // Assets will be created as graphics in create()
-        // This is just a placeholder to trigger the loading bar
-        this.load.once('complete', () => {
-            // Loading complete
-        });
+    loadSpaceRageAssets() {
+        const basePath = 'assets/sprites/SpaceRage';
+        
+        // Background
+        this.load.image('background', `${basePath}/BG.png`);
+        
+        // Player ship frames (blue variant)
+        this.load.image('player_l2', `${basePath}/Player/player_b_l2.png`);
+        this.load.image('player_l1', `${basePath}/Player/player_b_l1.png`);
+        this.load.image('player_m', `${basePath}/Player/player_b_m.png`);
+        this.load.image('player_r1', `${basePath}/Player/player_b_r1.png`);
+        this.load.image('player_r2', `${basePath}/Player/player_b_r2.png`);
+        
+        // Enemy Type 1 (Scout - green variant)
+        this.load.image('enemy_scout_l2', `${basePath}/Enemies/enemy_1_g_l2.png`);
+        this.load.image('enemy_scout_l1', `${basePath}/Enemies/enemy_1_g_l1.png`);
+        this.load.image('enemy_scout_m', `${basePath}/Enemies/enemy_1_g_m.png`);
+        this.load.image('enemy_scout_r1', `${basePath}/Enemies/enemy_1_g_r1.png`);
+        this.load.image('enemy_scout_r2', `${basePath}/Enemies/enemy_1_g_r2.png`);
+        
+        // Enemy Type 2 (Fighter - red variant)
+        this.load.image('enemy_fighter_l2', `${basePath}/Enemies/enemy_2_r_l2.png`);
+        this.load.image('enemy_fighter_l1', `${basePath}/Enemies/enemy_2_r_l1.png`);
+        this.load.image('enemy_fighter_m', `${basePath}/Enemies/enemy_2_r_m.png`);
+        this.load.image('enemy_fighter_r1', `${basePath}/Enemies/enemy_2_r_r1.png`);
+        this.load.image('enemy_fighter_r2', `${basePath}/Enemies/enemy_2_r_r2.png`);
+        
+        // Enemy Type 3 (Bomber - blue variant of type 2)
+        this.load.image('enemy_bomber_l2', `${basePath}/Enemies/enemy_2_b_l2.png`);
+        this.load.image('enemy_bomber_l1', `${basePath}/Enemies/enemy_2_b_l1.png`);
+        this.load.image('enemy_bomber_m', `${basePath}/Enemies/enemy_2_b_m.png`);
+        this.load.image('enemy_bomber_r1', `${basePath}/Enemies/enemy_2_b_r1.png`);
+        this.load.image('enemy_bomber_r2', `${basePath}/Enemies/enemy_2_b_r2.png`);
+        
+        // Enemy Type 4 (Elite - red variant of type 1)
+        this.load.image('enemy_elite_l2', `${basePath}/Enemies/enemy_1_r_l2.png`);
+        this.load.image('enemy_elite_l1', `${basePath}/Enemies/enemy_1_r_l1.png`);
+        this.load.image('enemy_elite_m', `${basePath}/Enemies/enemy_1_r_m.png`);
+        this.load.image('enemy_elite_r1', `${basePath}/Enemies/enemy_1_r_r1.png`);
+        this.load.image('enemy_elite_r2', `${basePath}/Enemies/enemy_1_r_r2.png`);
+        
+        // Mines (for bomber drops or obstacles)
+        for (let i = 1; i <= 9; i++) {
+            this.load.image(`mine_${i}`, `${basePath}/Enemies/mine_1_0${i}.png`);
+        }
+        
+        // Explosions
+        for (let i = 1; i <= 11; i++) {
+            const num = i < 10 ? `0${i}` : i;
+            this.load.image(`explosion1_${i}`, `${basePath}/Explosions/explosion_1_${num}.png`);
+        }
+        for (let i = 1; i <= 9; i++) {
+            this.load.image(`explosion2_${i}`, `${basePath}/Explosions/explosion_2_0${i}.png`);
+        }
+        for (let i = 1; i <= 9; i++) {
+            this.load.image(`explosion3_${i}`, `${basePath}/Explosions/explosion_3_0${i}.png`);
+        }
+        
+        // FX - Bullets
+        this.load.image('bullet_plasma1', `${basePath}/FX/plasma_1.png`);
+        this.load.image('bullet_plasma2', `${basePath}/FX/plasma_2.png`);
+        this.load.image('bullet_proton1', `${basePath}/FX/proton_01.png`);
+        this.load.image('bullet_proton2', `${basePath}/FX/proton_02.png`);
+        this.load.image('bullet_proton3', `${basePath}/FX/proton_03.png`);
+        this.load.image('bullet_vulcan1', `${basePath}/FX/vulcan_1.png`);
+        this.load.image('bullet_vulcan2', `${basePath}/FX/vulcan_2.png`);
+        this.load.image('bullet_vulcan3', `${basePath}/FX/vulcan_3.png`);
+        
+        // FX - Exhaust
+        for (let i = 1; i <= 5; i++) {
+            this.load.image(`exhaust_${i}`, `${basePath}/FX/exhaust_0${i}.png`);
+        }
     }
 
     create() {
-        // Create actual placeholder graphics
+        // Create animations
+        this.createAnimations();
+        
+        // Create collectible graphics (not in SpaceRage pack)
+        this.createCollectibleGraphics();
+        
+        // Create additional placeholder graphics
         this.createPlaceholderGraphics();
         
         // Start menu scene
         this.scene.start('MenuScene');
     }
 
-    createPlaceholderGraphics() {
-        // Player ship (triangle)
-        const playerGraphics = this.add.graphics();
-        playerGraphics.fillStyle(0x00ffff);
-        playerGraphics.fillTriangle(10, 0, 0, 20, 20, 20);
-        playerGraphics.generateTexture('player', 20, 20);
-        playerGraphics.destroy();
+    createAnimations() {
+        // Explosion animation 1 (small)
+        this.anims.create({
+            key: 'explode_small',
+            frames: [
+                { key: 'explosion1_1' },
+                { key: 'explosion1_2' },
+                { key: 'explosion1_3' },
+                { key: 'explosion1_4' },
+                { key: 'explosion1_5' },
+                { key: 'explosion1_6' },
+                { key: 'explosion1_7' },
+                { key: 'explosion1_8' },
+                { key: 'explosion1_9' },
+                { key: 'explosion1_10' },
+                { key: 'explosion1_11' }
+            ],
+            frameRate: 20,
+            repeat: 0
+        });
+        
+        // Explosion animation 2 (medium)
+        this.anims.create({
+            key: 'explode_medium',
+            frames: [
+                { key: 'explosion2_1' },
+                { key: 'explosion2_2' },
+                { key: 'explosion2_3' },
+                { key: 'explosion2_4' },
+                { key: 'explosion2_5' },
+                { key: 'explosion2_6' },
+                { key: 'explosion2_7' },
+                { key: 'explosion2_8' },
+                { key: 'explosion2_9' }
+            ],
+            frameRate: 18,
+            repeat: 0
+        });
+        
+        // Explosion animation 3 (large - for bosses)
+        this.anims.create({
+            key: 'explode_large',
+            frames: [
+                { key: 'explosion3_1' },
+                { key: 'explosion3_2' },
+                { key: 'explosion3_3' },
+                { key: 'explosion3_4' },
+                { key: 'explosion3_5' },
+                { key: 'explosion3_6' },
+                { key: 'explosion3_7' },
+                { key: 'explosion3_8' },
+                { key: 'explosion3_9' }
+            ],
+            frameRate: 15,
+            repeat: 0
+        });
+        
+        // Exhaust animation
+        this.anims.create({
+            key: 'exhaust',
+            frames: [
+                { key: 'exhaust_1' },
+                { key: 'exhaust_2' },
+                { key: 'exhaust_3' },
+                { key: 'exhaust_4' },
+                { key: 'exhaust_5' }
+            ],
+            frameRate: 15,
+            repeat: -1
+        });
+        
+        // Mine rotation animation
+        this.anims.create({
+            key: 'mine_rotate',
+            frames: [
+                { key: 'mine_1' },
+                { key: 'mine_2' },
+                { key: 'mine_3' },
+                { key: 'mine_4' },
+                { key: 'mine_5' },
+                { key: 'mine_6' },
+                { key: 'mine_7' },
+                { key: 'mine_8' },
+                { key: 'mine_9' }
+            ],
+            frameRate: 10,
+            repeat: -1
+        });
+    }
 
-        // Enemy scout (small red square)
-        const scoutGraphics = this.add.graphics();
-        scoutGraphics.fillStyle(0xff0000);
-        scoutGraphics.fillRect(0, 0, 16, 16);
-        scoutGraphics.generateTexture('enemy-scout', 16, 16);
-        scoutGraphics.destroy();
-
-        // Enemy fighter (medium red square)
-        const fighterGraphics = this.add.graphics();
-        fighterGraphics.fillStyle(0xff6600);
-        fighterGraphics.fillRect(0, 0, 20, 20);
-        fighterGraphics.generateTexture('enemy-fighter', 20, 20);
-        fighterGraphics.destroy();
-
-        // Enemy bomber (large red square)
-        const bomberGraphics = this.add.graphics();
-        bomberGraphics.fillStyle(0xcc0000);
-        bomberGraphics.fillRect(0, 0, 24, 24);
-        bomberGraphics.generateTexture('enemy-bomber', 24, 24);
-        bomberGraphics.destroy();
-
-        // Enemy elite (purple square)
-        const eliteGraphics = this.add.graphics();
-        eliteGraphics.fillStyle(0xff00ff);
-        eliteGraphics.fillRect(0, 0, 22, 22);
-        eliteGraphics.generateTexture('enemy-elite', 22, 22);
-        eliteGraphics.destroy();
-
-        // Player bullet (yellow circle)
-        const bulletPlayerGraphics = this.add.graphics();
-        bulletPlayerGraphics.fillStyle(0xffff00);
-        bulletPlayerGraphics.fillCircle(4, 4, 4);
-        bulletPlayerGraphics.generateTexture('bullet-player', 8, 8);
-        bulletPlayerGraphics.destroy();
-
-        // Enemy bullet (red circle)
-        const bulletEnemyGraphics = this.add.graphics();
-        bulletEnemyGraphics.fillStyle(0xff0000);
-        bulletEnemyGraphics.fillCircle(4, 4, 4);
-        bulletEnemyGraphics.generateTexture('bullet-enemy', 8, 8);
-        bulletEnemyGraphics.destroy();
-
-        // Collectible coin (gold circle)
+    createCollectibleGraphics() {
+        // Coin (gold circle)
         const coinGraphics = this.add.graphics();
         coinGraphics.fillStyle(0xffd700);
-        coinGraphics.fillCircle(8, 8, 8);
-        coinGraphics.generateTexture('collectible-coin', 16, 16);
+        coinGraphics.fillCircle(16, 16, 14);
+        coinGraphics.fillStyle(0xffec8b);
+        coinGraphics.fillCircle(16, 16, 10);
+        coinGraphics.fillStyle(0xffd700);
+        coinGraphics.fillCircle(14, 14, 6);
+        coinGraphics.generateTexture('collectible-coin', 32, 32);
         coinGraphics.destroy();
 
-        // Collectible crystal (blue diamond)
+        // Crystal (blue diamond)
         const crystalGraphics = this.add.graphics();
-        crystalGraphics.fillStyle(0x0080ff);
-        crystalGraphics.fillTriangle(8, 0, 16, 12, 0, 12);
-        crystalGraphics.fillTriangle(8, 16, 16, 4, 0, 4);
-        crystalGraphics.generateTexture('collectible-crystal', 16, 16);
+        crystalGraphics.fillStyle(0x00bfff);
+        crystalGraphics.fillTriangle(16, 2, 28, 16, 16, 30);
+        crystalGraphics.fillTriangle(16, 2, 4, 16, 16, 30);
+        crystalGraphics.fillStyle(0x87ceeb);
+        crystalGraphics.fillTriangle(16, 6, 22, 16, 16, 26);
+        crystalGraphics.generateTexture('collectible-crystal', 32, 32);
         crystalGraphics.destroy();
 
-        // Collectible star (yellow star - using circle as fallback)
+        // Star (yellow star shape)
         const starGraphics = this.add.graphics();
         starGraphics.fillStyle(0xffff00);
-        starGraphics.fillCircle(8, 8, 8);
-        starGraphics.fillStyle(0xffaa00);
-        starGraphics.fillCircle(8, 8, 5);
-        starGraphics.generateTexture('collectible-star', 16, 16);
+        // Draw star shape
+        starGraphics.fillCircle(16, 16, 12);
+        starGraphics.fillStyle(0xffffff);
+        starGraphics.fillCircle(16, 16, 6);
+        starGraphics.generateTexture('collectible-star', 32, 32);
         starGraphics.destroy();
 
-        // Collectible fortune coin (gold with glow)
+        // Fortune Coin (special gold with sparkle)
         const fortuneGraphics = this.add.graphics();
         fortuneGraphics.fillStyle(0xffd700);
-        fortuneGraphics.fillCircle(10, 10, 10);
-        fortuneGraphics.fillStyle(0xffff00);
-        fortuneGraphics.fillCircle(10, 10, 6);
-        fortuneGraphics.generateTexture('collectible-fortune', 20, 20);
+        fortuneGraphics.fillCircle(18, 18, 16);
+        fortuneGraphics.fillStyle(0xffec8b);
+        fortuneGraphics.fillCircle(18, 18, 12);
+        fortuneGraphics.fillStyle(0xff6600);
+        fortuneGraphics.fillCircle(18, 18, 8);
+        fortuneGraphics.fillStyle(0xffffff);
+        fortuneGraphics.fillCircle(12, 12, 4);
+        fortuneGraphics.generateTexture('collectible-fortune', 36, 36);
         fortuneGraphics.destroy();
+    }
 
-        // Boss mothership (large rectangle)
+    createPlaceholderGraphics() {
+        // Enemy bullet (red energy)
+        const bulletEnemyGraphics = this.add.graphics();
+        bulletEnemyGraphics.fillStyle(0xff0000);
+        bulletEnemyGraphics.fillCircle(8, 8, 6);
+        bulletEnemyGraphics.fillStyle(0xff6600);
+        bulletEnemyGraphics.fillCircle(8, 8, 4);
+        bulletEnemyGraphics.generateTexture('bullet-enemy', 16, 16);
+        bulletEnemyGraphics.destroy();
+
+        // Boss placeholder (large ship)
         const bossGraphics = this.add.graphics();
         bossGraphics.fillStyle(0x8b0000);
-        bossGraphics.fillRect(0, 0, 200, 100);
+        bossGraphics.fillRect(0, 20, 200, 80);
         bossGraphics.fillStyle(0xff0000);
-        bossGraphics.fillRect(10, 10, 180, 80);
+        bossGraphics.fillRect(20, 0, 160, 100);
+        bossGraphics.fillStyle(0xcc0000);
+        bossGraphics.fillTriangle(100, 0, 60, 30, 140, 30);
+        bossGraphics.fillStyle(0x660000);
+        bossGraphics.fillRect(80, 40, 40, 30);
         bossGraphics.generateTexture('boss-mothership', 200, 100);
         bossGraphics.destroy();
-
-        // Explosion (orange circle)
-        const explosionGraphics = this.add.graphics();
-        explosionGraphics.fillStyle(0xff6600);
-        explosionGraphics.fillCircle(8, 8, 8);
-        explosionGraphics.generateTexture('explosion', 16, 16);
-        explosionGraphics.destroy();
     }
 }

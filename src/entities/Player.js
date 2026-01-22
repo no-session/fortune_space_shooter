@@ -3,13 +3,14 @@ import { GAME_CONFIG } from '../utils/constants.js';
 
 export default class Player extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y) {
-        super(scene, x, y, 'player');
+        super(scene, x, y, 'player_m');
         
         scene.add.existing(this);
         scene.physics.add.existing(this);
         
         this.setCollideWorldBounds(true);
-        this.setScale(1.5);
+        this.setScale(0.8);
+        this.setDepth(100);
         
         // Player stats
         this.health = GAME_CONFIG.PLAYER_HEALTH;
@@ -18,7 +19,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         this.lives = GAME_CONFIG.PLAYER_LIVES;
         
         // Weapon stats
-        this.fireRate = 200; // milliseconds between shots
+        this.fireRate = 150; // milliseconds between shots
         this.lastFired = 0;
         this.bulletSpeed = GAME_CONFIG.BULLET_SPEED;
         this.bulletSpread = 1; // number of bullets per shot
@@ -36,12 +37,30 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         this.autoFire = true;
         this.isFiring = false;
         
+        // Banking animation state
+        this.currentFrame = 'player_m';
+        this.bankingTween = null;
+        
+        // Exhaust effect
+        this.createExhaust();
+        
+        // Invincibility
+        this.invincible = false;
+        
         // Set up input
         this.setupInput();
     }
 
+    createExhaust() {
+        // Create exhaust sprite behind the player
+        this.exhaust = this.scene.add.sprite(this.x, this.y + 30, 'exhaust_1');
+        this.exhaust.setScale(0.6);
+        this.exhaust.setDepth(99);
+        this.exhaust.play('exhaust');
+    }
+
     setupInput() {
-        // Space bar to toggle auto-fire
+        // Space bar for manual fire
         this.spaceKey.on('down', () => {
             this.isFiring = true;
         });
@@ -76,6 +95,14 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         
         this.setVelocity(velocityX, velocityY);
         
+        // Update banking animation based on horizontal movement
+        this.updateBankingAnimation(velocityX);
+        
+        // Update exhaust position
+        if (this.exhaust) {
+            this.exhaust.setPosition(this.x, this.y + 35);
+        }
+        
         // Shooting
         if (this.autoFire || this.isFiring) {
             if (time > this.lastFired) {
@@ -85,42 +112,40 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         }
     }
 
+    updateBankingAnimation(velocityX) {
+        let targetFrame = 'player_m';
+        
+        if (velocityX < -50) {
+            targetFrame = velocityX < -150 ? 'player_l2' : 'player_l1';
+        } else if (velocityX > 50) {
+            targetFrame = velocityX > 150 ? 'player_r2' : 'player_r1';
+        }
+        
+        if (targetFrame !== this.currentFrame) {
+            this.currentFrame = targetFrame;
+            this.setTexture(targetFrame);
+        }
+    }
+
     shoot() {
         const bulletX = this.x;
-        const bulletY = this.y - 20;
+        const bulletY = this.y - 30;
+        
+        // Determine bullet texture based on weapon level
+        const bulletTexture = this.weaponLevel >= 3 ? 'bullet_proton1' : 'bullet_plasma1';
         
         if (this.bulletSpread === 1) {
             // Single bullet
-            const bullet = this.scene.physics.add.sprite(bulletX, bulletY, 'bullet-player');
-            bullet.setVelocityY(-this.bulletSpeed);
-            bullet.setScale(1.5);
-            this.bullets.add(bullet);
+            this.createBullet(bulletX, bulletY, 0, bulletTexture);
         } else if (this.bulletSpread === 2) {
             // Two bullets side by side
-            const bullet1 = this.scene.physics.add.sprite(bulletX - 10, bulletY, 'bullet-player');
-            const bullet2 = this.scene.physics.add.sprite(bulletX + 10, bulletY, 'bullet-player');
-            bullet1.setVelocityY(-this.bulletSpeed);
-            bullet2.setVelocityY(-this.bulletSpeed);
-            bullet1.setScale(1.5);
-            bullet2.setScale(1.5);
-            this.bullets.add(bullet1);
-            this.bullets.add(bullet2);
+            this.createBullet(bulletX - 15, bulletY, 0, bulletTexture);
+            this.createBullet(bulletX + 15, bulletY, 0, bulletTexture);
         } else if (this.bulletSpread >= 3) {
-            // Three bullets: center, left, right
-            const bullet1 = this.scene.physics.add.sprite(bulletX, bulletY, 'bullet-player');
-            const bullet2 = this.scene.physics.add.sprite(bulletX - 15, bulletY, 'bullet-player');
-            const bullet3 = this.scene.physics.add.sprite(bulletX + 15, bulletY, 'bullet-player');
-            bullet1.setVelocityY(-this.bulletSpeed);
-            bullet2.setVelocityY(-this.bulletSpeed);
-            bullet2.setVelocityX(-50);
-            bullet3.setVelocityY(-this.bulletSpeed);
-            bullet3.setVelocityX(50);
-            bullet1.setScale(1.5);
-            bullet2.setScale(1.5);
-            bullet3.setScale(1.5);
-            this.bullets.add(bullet1);
-            this.bullets.add(bullet2);
-            this.bullets.add(bullet3);
+            // Three bullets with spread
+            this.createBullet(bulletX, bulletY, 0, bulletTexture);
+            this.createBullet(bulletX - 20, bulletY, -50, bulletTexture);
+            this.createBullet(bulletX + 20, bulletY, 50, bulletTexture);
         }
         
         // Play shoot sound if available
@@ -129,36 +154,79 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         }
     }
 
+    createBullet(x, y, offsetX, texture) {
+        const bullet = this.scene.physics.add.sprite(x, y, texture);
+        bullet.setVelocityY(-this.bulletSpeed);
+        bullet.setVelocityX(offsetX);
+        bullet.setScale(0.5);
+        bullet.setDepth(50);
+        this.bullets.add(bullet);
+    }
+
     takeDamage(amount) {
+        if (this.invincible) return;
+        
         this.health -= amount;
+        
+        // Flash effect
+        this.setTint(0xff0000);
+        this.scene.time.delayedCall(100, () => {
+            this.clearTint();
+        });
+        
+        // Screen shake
+        this.scene.cameras.main.shake(100, 0.01);
+        
         if (this.health <= 0) {
             this.health = 0;
             this.die();
-        } else {
-            // Flash effect
-            this.setTint(0xff0000);
-            this.scene.time.delayedCall(100, () => {
-                this.clearTint();
-            });
         }
     }
 
     die() {
         this.lives--;
-        this.health = this.maxHealth;
         
         // Create explosion
+        this.createDeathExplosion();
+        
+        // Play explosion sound
         if (this.scene.soundManager) {
             this.scene.soundManager.playExplosion();
         }
         
-        // Reset position
-        this.setPosition(this.scene.scale.width / 2, this.scene.scale.height - 50);
-        
-        // Invincibility period
-        this.setAlpha(0.5);
-        this.scene.time.delayedCall(2000, () => {
-            this.setAlpha(1);
+        if (this.lives > 0) {
+            // Respawn
+            this.health = this.maxHealth;
+            this.setPosition(this.scene.scale.width / 2, this.scene.scale.height - 50);
+            
+            // Invincibility period
+            this.invincible = true;
+            this.setAlpha(0.5);
+            
+            // Blink effect
+            const blinkTween = this.scene.tweens.add({
+                targets: this,
+                alpha: { from: 0.3, to: 0.8 },
+                duration: 100,
+                repeat: 15,
+                yoyo: true
+            });
+            
+            this.scene.time.delayedCall(2000, () => {
+                this.invincible = false;
+                this.setAlpha(1);
+                if (blinkTween) blinkTween.stop();
+            });
+        }
+    }
+
+    createDeathExplosion() {
+        const explosion = this.scene.add.sprite(this.x, this.y, 'explosion1_1');
+        explosion.setScale(1.5);
+        explosion.setDepth(200);
+        explosion.play('explode_medium');
+        explosion.on('animationcomplete', () => {
+            explosion.destroy();
         });
     }
 
@@ -170,7 +238,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         this.weaponLevel++;
         if (this.weaponLevel === 2) {
             this.bulletSpread = 2;
-            this.fireRate = 150;
+            this.fireRate = 120;
         } else if (this.weaponLevel === 3) {
             this.bulletSpread = 3;
             this.fireRate = 100;
@@ -186,5 +254,12 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     isAlive() {
         return this.lives > 0;
+    }
+
+    destroy() {
+        if (this.exhaust) {
+            this.exhaust.destroy();
+        }
+        super.destroy();
     }
 }

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 
 export default class Boss extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y, bossType = 'mothership') {
-        super(scene, x, y, `boss-${bossType}`);
+        super(scene, x, y, 'boss-mothership');
         
         scene.add.existing(this);
         scene.physics.add.existing(this);
@@ -15,7 +15,7 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
         
         // Movement
         this.moveDirection = 1;
-        this.moveSpeed = 50;
+        this.moveSpeed = 80;
         
         // Shooting
         this.shootInterval = 1500;
@@ -23,8 +23,9 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
         this.bullets = scene.physics.add.group();
         
         // Visual
-        this.setScale(1);
+        this.setScale(1.2);
         this.setCollideWorldBounds(true);
+        this.setDepth(90);
         
         // Health bar
         this.createHealthBar();
@@ -40,21 +41,27 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
         const y = 30;
         
         // Background
-        this.healthBarBg = this.scene.add.rectangle(x, y, barWidth, barHeight, 0x333333);
+        this.healthBarBg = this.scene.add.rectangle(x, y, barWidth + 4, barHeight + 4, 0x000000);
         this.healthBarBg.setDepth(1000);
+        
+        // Health bar border
+        this.healthBarBorder = this.scene.add.rectangle(x, y, barWidth + 2, barHeight + 2, 0x333333);
+        this.healthBarBorder.setDepth(1001);
         
         // Health bar
         this.healthBar = this.scene.add.rectangle(x, y, barWidth, barHeight, 0xff0000);
-        this.healthBar.setDepth(1001);
+        this.healthBar.setDepth(1002);
         
         // Health text
         this.healthText = this.scene.add.text(x, y, 'BOSS', {
-            fontSize: '16px',
+            fontSize: '14px',
             fontFamily: 'monospace',
-            color: '#ffffff'
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 2
         });
         this.healthText.setOrigin(0.5);
-        this.healthText.setDepth(1002);
+        this.healthText.setDepth(1003);
     }
 
     enterScene() {
@@ -69,10 +76,13 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
     }
 
     update(time) {
+        // Don't update if entering
+        if (this.y < 80) return;
+        
         // Horizontal movement
-        if (this.x <= 100) {
+        if (this.x <= 120) {
             this.moveDirection = 1;
-        } else if (this.x >= this.scene.scale.width - 100) {
+        } else if (this.x >= this.scene.scale.width - 120) {
             this.moveDirection = -1;
         }
         this.setVelocityX(this.moveSpeed * this.moveDirection);
@@ -94,47 +104,53 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
             // Phase 1: Bullet spread
             this.shootSpread();
         } else if (phase === 2) {
-            // Phase 2: Deploy mini-drones
-            this.deployDrones();
+            // Phase 2: Deploy mini-drones + spread
+            this.shootSpread();
+            if (Math.random() < 0.3) {
+                this.deployDrones();
+            }
         } else if (phase === 3) {
-            // Phase 3: Laser beam
-            this.shootLaser();
+            // Phase 3: Rapid fire + drones
+            this.shootRapid();
+            if (Math.random() < 0.2) {
+                this.deployDrones();
+            }
         }
     }
 
     shootSpread() {
         // Fire 5 bullets in a spread
         for (let i = -2; i <= 2; i++) {
-            const bullet = this.scene.physics.add.sprite(this.x, this.y + 50, 'bullet-enemy');
-            bullet.setVelocityY(300);
-            bullet.setVelocityX(i * 100);
-            bullet.setScale(1.5);
+            const bullet = this.scene.physics.add.sprite(this.x + i * 30, this.y + 50, 'bullet-enemy');
+            bullet.setVelocityY(250);
+            bullet.setVelocityX(i * 60);
+            bullet.setScale(1.2);
+            bullet.setDepth(50);
             this.bullets.add(bullet);
+        }
+    }
+
+    shootRapid() {
+        // Fire 3 quick bullets
+        for (let i = 0; i < 3; i++) {
+            this.scene.time.delayedCall(i * 100, () => {
+                if (!this.active) return;
+                const bullet = this.scene.physics.add.sprite(this.x, this.y + 50, 'bullet-enemy');
+                bullet.setVelocityY(350);
+                bullet.setVelocityX(Phaser.Math.Between(-50, 50));
+                bullet.setScale(1.5);
+                bullet.setDepth(50);
+                this.bullets.add(bullet);
+            });
         }
     }
 
     deployDrones() {
         // Spawn mini enemies
         if (this.scene && this.scene.spawnMiniDrone) {
-            this.scene.spawnMiniDrone(this.x - 50, this.y + 50);
-            this.scene.spawnMiniDrone(this.x + 50, this.y + 50);
+            this.scene.spawnMiniDrone(this.x - 60, this.y + 50);
+            this.scene.spawnMiniDrone(this.x + 60, this.y + 50);
         }
-    }
-
-    shootLaser() {
-        // Create a large laser beam
-        const laser = this.scene.add.rectangle(this.x, this.y + 50, 20, 400, 0xff0000);
-        laser.setDepth(100);
-        
-        // Move laser down
-        this.scene.tweens.add({
-            targets: laser,
-            y: this.scene.scale.height + 200,
-            duration: 1000,
-            onComplete: () => {
-                laser.destroy();
-            }
-        });
     }
 
     takeDamage(amount) {
@@ -150,14 +166,35 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
         const healthPercent = this.health / this.maxHealth;
         if (healthPercent < 0.66 && this.currentPhase === 1) {
             this.currentPhase = 2;
-            this.shootInterval = 1000;
+            this.shootInterval = 1200;
+            this.moveSpeed = 100;
+            this.createPhaseTransitionEffect();
         } else if (healthPercent < 0.33 && this.currentPhase === 2) {
             this.currentPhase = 3;
             this.shootInterval = 800;
+            this.moveSpeed = 120;
+            this.createPhaseTransitionEffect();
         }
         
         if (this.health <= 0) {
             this.die();
+        }
+    }
+
+    createPhaseTransitionEffect() {
+        // Flash and shake
+        this.scene.cameras.main.flash(200, 255, 100, 100);
+        this.scene.cameras.main.shake(300, 0.01);
+        
+        // Burst of bullets
+        for (let i = 0; i < 8; i++) {
+            const angle = (Math.PI * 2 * i) / 8;
+            const bullet = this.scene.physics.add.sprite(this.x, this.y, 'bullet-enemy');
+            bullet.setVelocityX(Math.cos(angle) * 200);
+            bullet.setVelocityY(Math.sin(angle) * 200);
+            bullet.setScale(1);
+            bullet.setDepth(50);
+            this.bullets.add(bullet);
         }
     }
 
@@ -172,9 +209,9 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
         );
         
         // Change color based on health
-        if (healthPercent > 0.5) {
+        if (healthPercent > 0.66) {
             this.healthBar.setFillStyle(0xff0000);
-        } else if (healthPercent > 0.25) {
+        } else if (healthPercent > 0.33) {
             this.healthBar.setFillStyle(0xff6600);
         } else {
             this.healthBar.setFillStyle(0xffff00);
@@ -184,22 +221,25 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
     }
 
     die() {
-        // Big explosion
-        const explosion = this.scene.add.circle(this.x, this.y, 50, 0xff6600);
-        explosion.setDepth(200);
-        
-        this.scene.tweens.add({
-            targets: explosion,
-            radius: 200,
-            alpha: 0,
-            duration: 500,
-            onComplete: () => {
-                explosion.destroy();
-            }
-        });
+        // Multiple explosion animations
+        for (let i = 0; i < 5; i++) {
+            const delay = i * 150;
+            this.scene.time.delayedCall(delay, () => {
+                const offsetX = Phaser.Math.Between(-80, 80);
+                const offsetY = Phaser.Math.Between(-40, 40);
+                const explosion = this.scene.add.sprite(this.x + offsetX, this.y + offsetY, 'explosion3_1');
+                explosion.setScale(1.5);
+                explosion.setDepth(200);
+                explosion.play('explode_large');
+                explosion.on('animationcomplete', () => {
+                    explosion.destroy();
+                });
+            });
+        }
         
         // Screen shake
-        this.scene.cameras.main.shake(500, 0.02);
+        this.scene.cameras.main.shake(800, 0.03);
+        this.scene.cameras.main.flash(500, 255, 200, 100);
         
         // Play explosion sound
         if (this.scene.soundManager) {
@@ -207,17 +247,22 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
         }
         
         // Remove health bar
-        this.healthBarBg.destroy();
-        this.healthBar.destroy();
-        this.healthText.destroy();
+        if (this.healthBarBg) this.healthBarBg.destroy();
+        if (this.healthBarBorder) this.healthBarBorder.destroy();
+        if (this.healthBar) this.healthBar.destroy();
+        if (this.healthText) this.healthText.destroy();
         
         // Destroy bullets
-        this.bullets.clear(true, true);
-        
-        // Trigger boss defeated
-        if (this.scene && this.scene.onBossDefeated) {
-            this.scene.onBossDefeated();
+        if (this.bullets) {
+            this.bullets.clear(true, true);
         }
+        
+        // Trigger boss defeated after explosions
+        this.scene.time.delayedCall(800, () => {
+            if (this.scene && this.scene.onBossDefeated) {
+                this.scene.onBossDefeated();
+            }
+        });
         
         this.destroy();
     }
