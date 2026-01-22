@@ -55,6 +55,7 @@ export default class GameScene extends Phaser.Scene {
         // Game state
         this.gameOver = false;
         this.paused = false;
+        this.waveTransitioning = false;
     }
 
     createStarfield() {
@@ -156,7 +157,7 @@ export default class GameScene extends Phaser.Scene {
                     bullet.destroy();
                     player.takeDamage(10);
                     if (!player.isAlive()) {
-                        this.gameOver();
+                        this.triggerGameOver();
                     }
                 }
             }
@@ -171,7 +172,7 @@ export default class GameScene extends Phaser.Scene {
                     enemy.die();
                     player.takeDamage(20);
                     if (!player.isAlive()) {
-                        this.gameOver();
+                        this.triggerGameOver();
                     }
                 }
             }
@@ -294,7 +295,7 @@ export default class GameScene extends Phaser.Scene {
                                 bullet.destroy();
                                 player.takeDamage(15);
                                 if (!player.isAlive()) {
-                                    this.gameOver();
+                                    this.triggerGameOver();
                                 }
                             }
                         }
@@ -321,18 +322,32 @@ export default class GameScene extends Phaser.Scene {
             }
         });
         
-        // Check for wave completion
-        if (this.waveManager.isWaveComplete()) {
+        // Check for wave completion (only if not already transitioning)
+        if (this.waveManager.isWaveComplete() && !this.waveTransitioning) {
             this.nextWave();
         }
         
         // Update UI
         this.updateUI();
         
-        // Clean up off-screen bullets
+        // Clean up off-screen player bullets
         this.player.bullets.children.entries.forEach(bullet => {
             if (bullet && bullet.y < -50) {
                 bullet.destroy();
+            }
+        });
+        
+        // Clean up off-screen enemy bullets
+        this.enemyBullets.children.entries.forEach(bullet => {
+            if (bullet && (bullet.y > this.scale.height + 50 || bullet.y < -50)) {
+                bullet.destroy();
+            }
+        });
+        
+        // Clean up off-screen collectibles
+        this.collectibles.children.entries.forEach(collectible => {
+            if (collectible && collectible.y > this.scale.height + 50) {
+                collectible.destroy();
             }
         });
     }
@@ -411,19 +426,51 @@ export default class GameScene extends Phaser.Scene {
     }
 
     nextWave() {
+        if (this.waveTransitioning) return;
+        this.waveTransitioning = true;
+        
         const currentWave = this.waveManager.getCurrentWave();
         
-        // If boss wave, go to shop
-        if (this.waveManager.isBossWave()) {
-            this.scene.pause();
-            this.scene.launch('ShopScene', {
-                score: this.scoreManager.getScore(),
-                wave: currentWave
-            });
-        } else {
-            // Start next wave
-            this.waveManager.startWave(currentWave + 1);
-        }
+        // Show wave complete message
+        const waveText = this.add.text(
+            this.scale.width / 2,
+            this.scale.height / 2,
+            `Wave ${currentWave} Complete!`,
+            {
+                fontSize: '32px',
+                fontFamily: 'monospace',
+                color: '#00ffff',
+                stroke: '#000000',
+                strokeThickness: 4
+            }
+        );
+        waveText.setOrigin(0.5);
+        waveText.setDepth(1000);
+        
+        // Fade out and start next wave after delay
+        this.tweens.add({
+            targets: waveText,
+            alpha: 0,
+            y: waveText.y - 50,
+            duration: 1500,
+            onComplete: () => {
+                waveText.destroy();
+                
+                // If boss wave, go to shop
+                if (this.waveManager.isBossWave()) {
+                    this.scene.pause();
+                    this.scene.launch('ShopScene', {
+                        score: this.scoreManager.getScore(),
+                        wave: currentWave
+                    });
+                } else {
+                    // Start next wave
+                    this.waveManager.startWave(currentWave + 1);
+                }
+                
+                this.waveTransitioning = false;
+            }
+        });
     }
 
     onBossDefeated() {
@@ -464,7 +511,7 @@ export default class GameScene extends Phaser.Scene {
         }
     }
 
-    gameOver() {
+    triggerGameOver() {
         if (this.gameOver) return;
         
         this.gameOver = true;
