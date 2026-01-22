@@ -155,12 +155,14 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     createBullet(x, y, offsetX, texture) {
-        const bullet = this.scene.physics.add.sprite(x, y, texture);
-        bullet.setVelocityY(-this.bulletSpeed);
-        bullet.setVelocityX(offsetX);
-        bullet.setScale(0.5);
-        bullet.setDepth(50);
-        this.bullets.add(bullet);
+        const bullet = this.bullets.create(x, y, texture);
+        if (bullet) {
+            bullet.setVelocityY(-this.bulletSpeed);
+            bullet.setVelocityX(offsetX);
+            bullet.setScale(0.5);
+            bullet.setDepth(50);
+            bullet.body.allowGravity = false;
+        }
     }
 
     takeDamage(amount) {
