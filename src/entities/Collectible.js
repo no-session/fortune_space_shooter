@@ -58,13 +58,6 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
         }
     }
 
-    update() {
-        // Remove if off screen
-        if (this.y > this.scene.scale.height + 50) {
-            this.cleanup();
-        }
-    }
-
     collect() {
         // Prevent multiple collections
         if (this.collected) return;
@@ -144,17 +137,14 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
     }
 
     stopTweens() {
-        this.tweens.forEach(tween => {
-            if (tween && tween.isPlaying) {
-                tween.stop();
-            }
-        });
-        this.tweens = [];
-    }
-
-    cleanup() {
-        this.stopTweens();
-        this.destroy();
+        if (this.tweens) {
+            this.tweens.forEach(tween => {
+                if (tween && tween.isPlaying) {
+                    tween.stop();
+                }
+            });
+            this.tweens = [];
+        }
     }
 
     destroy() {

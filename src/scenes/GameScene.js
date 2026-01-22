@@ -183,19 +183,24 @@ export default class GameScene extends Phaser.Scene {
             this.collectibles,
             this.player,
             (collectible, player) => {
-                if (collectible && collectible.active && player && player.active) {
-                    // Make sure it's a Collectible with collect method
-                    if (typeof collectible.collect === 'function') {
-                        const value = this.scoreManager.addCollectible(
-                            collectible.value || 10,
-                            this.game.getTime()
-                        );
-                        collectible.collect();
-                        this.updateUI();
-                    } else {
-                        // Fallback: just destroy it
-                        collectible.destroy();
-                    }
+                // Check collected flag first to prevent duplicate processing
+                if (!collectible || !player) return;
+                if (collectible.collected) return;
+                if (!collectible.active || !player.active) return;
+                
+                // Mark as collected immediately
+                collectible.collected = true;
+                
+                // Add score
+                const value = collectible.value || 10;
+                this.scoreManager.addCollectible(value, this.game.getTime());
+                this.updateUI();
+                
+                // Collect the item (handles effects and destruction)
+                if (typeof collectible.collect === 'function') {
+                    collectible.collect();
+                } else {
+                    collectible.destroy();
                 }
             }
         );
@@ -321,12 +326,17 @@ export default class GameScene extends Phaser.Scene {
             }
         });
         
-        // Update collectibles
-        this.collectibles.children.entries.forEach(collectible => {
-            if (collectible && collectible.active) {
-                collectible.update();
+        // Update collectibles (use slice to avoid modifying array during iteration)
+        const collectiblesList = this.collectibles.children.entries.slice();
+        for (let i = collectiblesList.length - 1; i >= 0; i--) {
+            const collectible = collectiblesList[i];
+            if (collectible && collectible.active && !collectible.collected) {
+                // Check if off screen
+                if (collectible.y > this.scale.height + 50) {
+                    collectible.destroy();
+                }
             }
-        });
+        }
         
         // Check for wave completion (only if not already transitioning)
         if (this.waveManager.isWaveComplete() && !this.waveTransitioning) {
@@ -336,26 +346,23 @@ export default class GameScene extends Phaser.Scene {
         // Update UI
         this.updateUI();
         
-        // Clean up off-screen player bullets
-        this.player.bullets.children.entries.forEach(bullet => {
+        // Clean up off-screen player bullets (use slice to avoid modifying during iteration)
+        const playerBulletsList = this.player.bullets.children.entries.slice();
+        for (let i = playerBulletsList.length - 1; i >= 0; i--) {
+            const bullet = playerBulletsList[i];
             if (bullet && bullet.y < -50) {
                 bullet.destroy();
             }
-        });
+        }
         
-        // Clean up off-screen enemy bullets
-        this.enemyBullets.children.entries.forEach(bullet => {
+        // Clean up off-screen enemy bullets (use slice to avoid modifying during iteration)
+        const enemyBulletsList = this.enemyBullets.children.entries.slice();
+        for (let i = enemyBulletsList.length - 1; i >= 0; i--) {
+            const bullet = enemyBulletsList[i];
             if (bullet && (bullet.y > this.scale.height + 50 || bullet.y < -50)) {
                 bullet.destroy();
             }
-        });
-        
-        // Clean up off-screen collectibles
-        this.collectibles.children.entries.forEach(collectible => {
-            if (collectible && collectible.y > this.scale.height + 50) {
-                collectible.destroy();
-            }
-        });
+        }
     }
 
     onEnemyKilled(enemy) {
