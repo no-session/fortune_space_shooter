@@ -33,8 +33,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         // Bullet group
         this.bullets = scene.physics.add.group();
         
-        // Auto-fire flag
-        this.autoFire = true;
+        // Manual fire only (space bar)
+        this.autoFire = false;
         this.isFiring = false;
         
         // Banking animation state
