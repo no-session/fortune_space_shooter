@@ -12,7 +12,7 @@ export default class VFormation {
         
         // Movement properties
         this.velocityX = 50;
-        this.velocityY = 0;
+        this.velocityY = 40; // Constant downward movement
         this.direction = 1; // 1 for right, -1 for left
         
         // Create formation
@@ -41,16 +41,17 @@ export default class VFormation {
     }
 
     update(time) {
+        const delta = this.scene.game.loop.delta / 1000;
+        
         // Move formation as a unit
-        this.startX += this.velocityX * this.direction * (this.scene.game.loop.delta / 1000);
+        this.startX += this.velocityX * this.direction * delta;
+        this.startY += this.velocityY * delta; // Constant downward movement
         
         // Bounce off edges
         if (this.startX < 100) {
             this.direction = 1;
-            this.startY += 20; // Move down when hitting edge
         } else if (this.startX > this.scene.scale.width - 100) {
             this.direction = -1;
-            this.startY += 20;
         }
         
         // Update enemy positions
@@ -59,6 +60,12 @@ export default class VFormation {
                 const offsetX = enemy.formationOffset.x;
                 const offsetY = enemy.formationOffset.y;
                 enemy.setPosition(this.startX + offsetX, this.startY + offsetY);
+                
+                // Remove enemy if it goes off screen
+                if (enemy.y > this.scene.scale.height + 50) {
+                    enemy.destroy();
+                    this.removeEnemy(enemy);
+                }
             }
         });
     }

@@ -12,7 +12,7 @@ export default class GridFormation {
         
         // Movement properties
         this.velocityX = 60;
-        this.velocityY = 0;
+        this.velocityY = 35; // Constant downward movement
         this.direction = 1;
         this.sineOffset = 0;
         
@@ -41,12 +41,14 @@ export default class GridFormation {
     }
 
     update(time) {
+        const delta = this.scene.game.loop.delta / 1000;
+        
         // Side-to-side movement with slight sine wave
         this.sineOffset += 0.02;
-        const sineMovement = Math.sin(this.sineOffset) * 20;
+        const sineMovement = Math.sin(this.sineOffset) * 10;
         
-        this.startX += this.velocityX * this.direction * (this.scene.game.loop.delta / 1000);
-        this.startY += sineMovement * (this.scene.game.loop.delta / 1000);
+        this.startX += this.velocityX * this.direction * delta;
+        this.startY += (this.velocityY + sineMovement) * delta; // Constant downward + wave
         
         // Bounce off edges
         if (this.startX < 150) {
@@ -61,6 +63,12 @@ export default class GridFormation {
                 const offsetX = enemy.formationOffset.x;
                 const offsetY = enemy.formationOffset.y;
                 enemy.setPosition(this.startX + offsetX, this.startY + offsetY);
+                
+                // Remove enemy if it goes off screen
+                if (enemy.y > this.scene.scale.height + 50) {
+                    enemy.destroy();
+                    this.removeEnemy(enemy);
+                }
             }
         });
     }

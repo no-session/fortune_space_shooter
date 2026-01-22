@@ -14,7 +14,7 @@ export default class CircleFormation {
         this.radius = 80;
         this.rotation = 0;
         this.rotationSpeed = 0.5;
-        this.velocityY = 30;
+        this.velocityY = 50; // Increased downward movement
         
         // Create formation
         this.createFormation();
@@ -35,11 +35,13 @@ export default class CircleFormation {
     }
 
     update(time) {
+        const delta = this.scene.game.loop.delta / 1000;
+        
         // Rotate formation
-        this.rotation += this.rotationSpeed * (this.scene.game.loop.delta / 1000);
+        this.rotation += this.rotationSpeed * delta;
         
         // Move down
-        this.centerY += this.velocityY * (this.scene.game.loop.delta / 1000);
+        this.centerY += this.velocityY * delta;
         
         // Update enemy positions
         const angleStep = (Math.PI * 2) / Math.max(this.enemies.length, 1);
@@ -49,6 +51,12 @@ export default class CircleFormation {
                 const x = this.centerX + Math.cos(angle) * this.radius;
                 const y = this.centerY + Math.sin(angle) * this.radius;
                 enemy.setPosition(x, y);
+                
+                // Remove enemy if it goes off screen
+                if (enemy.y > this.scene.scale.height + 50) {
+                    enemy.destroy();
+                    this.removeEnemy(enemy);
+                }
             }
         });
     }

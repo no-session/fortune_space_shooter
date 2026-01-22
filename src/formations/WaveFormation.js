@@ -12,6 +12,7 @@ export default class WaveFormation {
         
         // Movement properties
         this.velocityX = 40;
+        this.velocityY = 45; // Constant downward movement
         this.direction = 1;
         this.waveOffset = 0;
         this.waveAmplitude = 30;
@@ -36,8 +37,11 @@ export default class WaveFormation {
     }
 
     update(time) {
-        // Move horizontally
-        this.startX += this.velocityX * this.direction * (this.scene.game.loop.delta / 1000);
+        const delta = this.scene.game.loop.delta / 1000;
+        
+        // Move horizontally and downward
+        this.startX += this.velocityX * this.direction * delta;
+        this.startY += this.velocityY * delta; // Constant downward movement
         
         // Update wave offset
         this.waveOffset += this.waveFrequency;
@@ -55,6 +59,12 @@ export default class WaveFormation {
                 const offsetX = enemy.formationOffset.x;
                 const waveY = Math.sin(this.waveOffset + index * 0.5) * this.waveAmplitude;
                 enemy.setPosition(this.startX + offsetX, this.startY + waveY);
+                
+                // Remove enemy if it goes off screen
+                if (enemy.y > this.scene.scale.height + 50) {
+                    enemy.destroy();
+                    this.removeEnemy(enemy);
+                }
             }
         });
     }
