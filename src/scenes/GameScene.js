@@ -183,13 +183,19 @@ export default class GameScene extends Phaser.Scene {
             this.collectibles,
             this.player,
             (collectible, player) => {
-                if (collectible.active && player.active) {
-                    const value = this.scoreManager.addCollectible(
-                        collectible.value,
-                        this.game.getTime()
-                    );
-                    collectible.collect();
-                    this.updateUI();
+                if (collectible && collectible.active && player && player.active) {
+                    // Make sure it's a Collectible with collect method
+                    if (typeof collectible.collect === 'function') {
+                        const value = this.scoreManager.addCollectible(
+                            collectible.value || 10,
+                            this.game.getTime()
+                        );
+                        collectible.collect();
+                        this.updateUI();
+                    } else {
+                        // Fallback: just destroy it
+                        collectible.destroy();
+                    }
                 }
             }
         );
