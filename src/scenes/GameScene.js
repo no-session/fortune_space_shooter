@@ -153,7 +153,7 @@ export default class GameScene extends Phaser.Scene {
             this.enemyBullets,
             this.player,
             (bullet, player) => {
-                if (bullet.active && player.active) {
+                if (bullet.active && player.active && !player.invincible && !player.isDying) {
                     bullet.destroy();
                     player.takeDamage(10);
                     if (!player.isAlive()) {
@@ -168,7 +168,7 @@ export default class GameScene extends Phaser.Scene {
             this.enemies,
             this.player,
             (enemy, player) => {
-                if (enemy.active && player.active) {
+                if (enemy.active && player.active && !player.invincible && !player.isDying) {
                     enemy.die();
                     player.takeDamage(20);
                     if (!player.isAlive()) {
@@ -291,7 +291,7 @@ export default class GameScene extends Phaser.Scene {
                         boss.bullets,
                         this.player,
                         (bullet, player) => {
-                            if (bullet.active && player.active) {
+                            if (bullet.active && player.active && !player.invincible && !player.isDying) {
                                 bullet.destroy();
                                 player.takeDamage(15);
                                 if (!player.isAlive()) {

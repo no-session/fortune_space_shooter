@@ -44,8 +44,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         // Exhaust effect
         this.createExhaust();
         
-        // Invincibility
+        // Invincibility and dying state
         this.invincible = false;
+        this.isDying = false;
         
         // Set up input
         this.setupInput();
@@ -71,6 +72,12 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     update(time) {
+        // Don't update if dying
+        if (this.isDying) {
+            this.setVelocity(0, 0);
+            return;
+        }
+        
         // Movement
         let velocityX = 0;
         let velocityY = 0;
@@ -166,9 +173,17 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     takeDamage(amount) {
-        if (this.invincible) return;
+        if (this.invincible || this.isDying) return;
         
         this.health -= amount;
+        
+        // Brief invincibility after taking damage
+        this.invincible = true;
+        this.scene.time.delayedCall(200, () => {
+            if (!this.isDying) {
+                this.invincible = false;
+            }
+        });
         
         // Flash effect
         this.setTint(0xff0000);
@@ -186,6 +201,10 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     die() {
+        if (this.isDying) return;
+        this.isDying = true;
+        this.invincible = true;
+        
         this.lives--;
         
         // Create explosion
@@ -197,28 +216,29 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         }
         
         if (this.lives > 0) {
-            // Respawn
-            this.health = this.maxHealth;
-            this.setPosition(this.scene.scale.width / 2, this.scene.scale.height - 50);
-            
-            // Invincibility period
-            this.invincible = true;
-            this.setAlpha(0.5);
-            
-            // Blink effect
-            const blinkTween = this.scene.tweens.add({
-                targets: this,
-                alpha: { from: 0.3, to: 0.8 },
-                duration: 100,
-                repeat: 15,
-                yoyo: true
+            // Respawn after short delay
+            this.scene.time.delayedCall(500, () => {
+                this.health = this.maxHealth;
+                this.setPosition(this.scene.scale.width / 2, this.scene.scale.height - 50);
+                this.isDying = false;
+                
+                // Blink effect during invincibility
+                const blinkTween = this.scene.tweens.add({
+                    targets: this,
+                    alpha: { from: 0.3, to: 0.8 },
+                    duration: 100,
+                    repeat: 15,
+                    yoyo: true
+                });
+                
+                this.scene.time.delayedCall(2000, () => {
+                    this.invincible = false;
+                    this.setAlpha(1);
+                    if (blinkTween) blinkTween.stop();
+                });
             });
-            
-            this.scene.time.delayedCall(2000, () => {
-                this.invincible = false;
-                this.setAlpha(1);
-                if (blinkTween) blinkTween.stop();
-            });
+        } else {
+            this.isDying = false;
         }
     }
 
