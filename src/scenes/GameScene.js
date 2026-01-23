@@ -330,18 +330,7 @@ export default class GameScene extends Phaser.Scene {
                 }
             }
         });
-        
-        // Track enemy bullets
-        this.enemies.children.entries.forEach(enemy => {
-            if (enemy && enemy.active && enemy.bullets) {
-                enemy.bullets.children.entries.forEach(bullet => {
-                    if (bullet && bullet.active && !this.enemyBullets.contains(bullet)) {
-                        this.enemyBullets.add(bullet);
-                    }
-                });
-            }
-        });
-        
+
         // Update collectibles (use slice to avoid modifying array during iteration)
         const collectiblesList = this.collectibles.children.entries.slice();
         for (let i = collectiblesList.length - 1; i >= 0; i--) {

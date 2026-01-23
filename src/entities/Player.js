@@ -191,6 +191,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     takeDamage(amount) {
         if (this.invincible || this.isDying) return;
         if (!this.scene || !this.scene.time) return; // Safety check
+        if (!this.active || !this.visible) return; // Don't take damage if not visible
 
         this.health -= amount;
 
@@ -202,7 +203,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
             }
         });
 
-        // Flash effect
+        // Flash effect (but don't affect alpha during blink animation)
         this.setTint(0xff0000);
         this.scene.time.delayedCall(100, () => {
             this.clearTint();
@@ -235,6 +236,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         }
 
         if (this.lives > 0) {
+            // Hide player temporarily
+            this.setAlpha(0);
+
             // Respawn after short delay
             if (this.scene && this.scene.time) {
                 this.scene.time.delayedCall(500, () => {
@@ -253,19 +257,25 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
                     // Blink effect during invincibility
                     this.blinkTween = this.scene.tweens.add({
                         targets: this,
-                        alpha: { from: 0.3, to: 0.8 },
+                        alpha: { from: 0.4, to: 1.0 },
                         duration: 100,
                         repeat: 15,
                         yoyo: true,
                         onComplete: () => {
                             // Ensure alpha is reset when tween completes
-                            this.setAlpha(1);
+                            if (this.active && !this.isDying) {
+                                this.setAlpha(1);
+                                this.setVisible(true);
+                            }
                         }
                     });
 
                     this.scene.time.delayedCall(2000, () => {
                         this.invincible = false;
-                        this.setAlpha(1);
+                        if (this.active && !this.isDying) {
+                            this.setAlpha(1);
+                            this.setVisible(true);
+                        }
                         if (this.blinkTween && this.blinkTween.isPlaying()) {
                             this.blinkTween.stop();
                         }
