@@ -223,41 +223,55 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         if (this.isDying) return;
         this.isDying = true;
         this.invincible = true;
-        
+
         this.lives--;
-        
+
         // Create explosion
         this.createDeathExplosion();
-        
+
         // Play explosion sound
         if (this.scene.soundManager) {
             this.scene.soundManager.playExplosion();
         }
-        
+
         if (this.lives > 0) {
             // Respawn after short delay
-            this.scene.time.delayedCall(500, () => {
-                this.health = this.maxHealth;
-                this.setPosition(this.scene.scale.width / 2, this.scene.scale.height - 50);
-                this.isDying = false;
-                
-                // Blink effect during invincibility
-                const blinkTween = this.scene.tweens.add({
-                    targets: this,
-                    alpha: { from: 0.3, to: 0.8 },
-                    duration: 100,
-                    repeat: 15,
-                    yoyo: true
+            if (this.scene && this.scene.time) {
+                this.scene.time.delayedCall(500, () => {
+                    this.health = this.maxHealth;
+                    this.setPosition(this.scene.scale.width / 2, this.scene.scale.height - 50);
+                    this.isDying = false;
+                    this.setAlpha(1); // Make sure player is visible
+                    this.setActive(true);
+                    this.setVisible(true);
+
+                    // Blink effect during invincibility
+                    const blinkTween = this.scene.tweens.add({
+                        targets: this,
+                        alpha: { from: 0.3, to: 0.8 },
+                        duration: 100,
+                        repeat: 15,
+                        yoyo: true
+                    });
+
+                    this.scene.time.delayedCall(2000, () => {
+                        this.invincible = false;
+                        this.setAlpha(1);
+                        if (blinkTween) blinkTween.stop();
+                    });
                 });
-                
-                this.scene.time.delayedCall(2000, () => {
-                    this.invincible = false;
-                    this.setAlpha(1);
-                    if (blinkTween) blinkTween.stop();
-                });
-            });
+            }
         } else {
+            // Game over - no more lives
+            this.setAlpha(0); // Hide player
             this.isDying = false;
+
+            // Trigger game over after a short delay
+            if (this.scene && this.scene.time && this.scene.triggerGameOver) {
+                this.scene.time.delayedCall(1000, () => {
+                    this.scene.triggerGameOver();
+                });
+            }
         }
     }
 
