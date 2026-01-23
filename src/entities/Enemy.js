@@ -120,7 +120,12 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
 
         bullet.setScale(1);
         bullet.setDepth(50);
+
+        // Add to both local group and scene's enemyBullets group
         this.bullets.add(bullet);
+        if (this.scene.enemyBullets) {
+            this.scene.enemyBullets.add(bullet);
+        }
 
         // Play shoot sound if available
         if (this.scene.soundManager) {

@@ -245,19 +245,31 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
                     this.setActive(true);
                     this.setVisible(true);
 
+                    // Stop any existing blink tweens first
+                    if (this.blinkTween && this.blinkTween.isPlaying()) {
+                        this.blinkTween.stop();
+                    }
+
                     // Blink effect during invincibility
-                    const blinkTween = this.scene.tweens.add({
+                    this.blinkTween = this.scene.tweens.add({
                         targets: this,
                         alpha: { from: 0.3, to: 0.8 },
                         duration: 100,
                         repeat: 15,
-                        yoyo: true
+                        yoyo: true,
+                        onComplete: () => {
+                            // Ensure alpha is reset when tween completes
+                            this.setAlpha(1);
+                        }
                     });
 
                     this.scene.time.delayedCall(2000, () => {
                         this.invincible = false;
                         this.setAlpha(1);
-                        if (blinkTween) blinkTween.stop();
+                        if (this.blinkTween && this.blinkTween.isPlaying()) {
+                            this.blinkTween.stop();
+                        }
+                        this.blinkTween = null;
                     });
                 });
             }
@@ -327,6 +339,11 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     destroy() {
+        // Stop any running blink tween
+        if (this.blinkTween && this.blinkTween.isPlaying()) {
+            this.blinkTween.stop();
+        }
+
         if (this.exhaust) {
             this.exhaust.destroy();
         }
