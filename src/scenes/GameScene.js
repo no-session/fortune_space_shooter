@@ -207,6 +207,11 @@ export default class GameScene extends Phaser.Scene {
                 // Mark as collected immediately
                 collectible.collected = true;
 
+                // Play collect sound
+                if (this.soundManager) {
+                    this.soundManager.playCollect();
+                }
+
                 // Add score
                 const value = collectible.value || 10;
                 this.scoreManager.addCollectible(value, this.game.getTime());

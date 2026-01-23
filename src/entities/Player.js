@@ -281,6 +281,11 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
         this.health -= amount;
 
+        // Play hit sound
+        if (this.scene.soundManager) {
+            this.scene.soundManager.playHit();
+        }
+
         // Brief invincibility after taking damage
         this.invincible = true;
         this.scene.time.delayedCall(200, () => {

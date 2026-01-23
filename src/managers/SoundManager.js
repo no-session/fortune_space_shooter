@@ -4,21 +4,16 @@ export default class SoundManager {
         this.soundsEnabled = true;
         this.musicEnabled = true;
         this.volume = 0.5;
-        
-        // Create placeholder sounds (will be replaced with actual audio files)
-        this.createPlaceholderSounds();
-    }
 
-    createPlaceholderSounds() {
-        // These are placeholder - in a real game, you'd load actual audio files
-        // For now, we'll use silent sounds that can be replaced later
+        // Check which sounds are available
         this.sounds = {
-            shoot: null,
-            enemyShoot: null,
-            explosion: null,
-            collect: null,
-            bossHit: null,
-            music: null
+            shoot: scene.cache.audio.exists('shoot'),
+            enemyShoot: scene.cache.audio.exists('enemyShoot'),
+            explosion: scene.cache.audio.exists('explosion'),
+            explosionBig: scene.cache.audio.exists('explosionBig'),
+            hit: scene.cache.audio.exists('hit'),
+            collect: scene.cache.audio.exists('collect'),
+            powerup: scene.cache.audio.exists('powerup')
         };
     }
 
@@ -40,28 +35,33 @@ export default class SoundManager {
         }
     }
 
+    playExplosionBig() {
+        if (this.soundsEnabled && this.sounds.explosionBig) {
+            this.scene.sound.play('explosionBig', { volume: this.volume * 0.7 });
+        }
+    }
+
+    playHit() {
+        if (this.soundsEnabled && this.sounds.hit) {
+            this.scene.sound.play('hit', { volume: this.volume * 0.4 });
+        }
+    }
+
     playCollect() {
         if (this.soundsEnabled && this.sounds.collect) {
             this.scene.sound.play('collect', { volume: this.volume * 0.4 });
         }
     }
 
+    playPowerup() {
+        if (this.soundsEnabled && this.sounds.powerup) {
+            this.scene.sound.play('powerup', { volume: this.volume * 0.5 });
+        }
+    }
+
+    // Alias for backward compatibility
     playBossHit() {
-        if (this.soundsEnabled && this.sounds.bossHit) {
-            this.scene.sound.play('bossHit', { volume: this.volume * 0.6 });
-        }
-    }
-
-    playMusic() {
-        if (this.musicEnabled && this.sounds.music) {
-            this.sounds.music.play({ loop: true, volume: this.volume * 0.3 });
-        }
-    }
-
-    stopMusic() {
-        if (this.sounds.music) {
-            this.sounds.music.stop();
-        }
+        this.playExplosionBig();
     }
 
     setVolume(volume) {
@@ -70,14 +70,11 @@ export default class SoundManager {
 
     toggleSounds() {
         this.soundsEnabled = !this.soundsEnabled;
+        return this.soundsEnabled;
     }
 
     toggleMusic() {
         this.musicEnabled = !this.musicEnabled;
-        if (this.musicEnabled) {
-            this.playMusic();
-        } else {
-            this.stopMusic();
-        }
+        return this.musicEnabled;
     }
 }

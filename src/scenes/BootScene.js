@@ -75,6 +75,21 @@ export default class BootScene extends Phaser.Scene {
 
         // Load all SpaceRage assets
         this.loadSpaceRageAssets();
+
+        // Load audio assets
+        this.loadAudioAssets();
+    }
+
+    loadAudioAssets() {
+        const audioPath = 'assets/audio';
+
+        this.load.audio('shoot', `${audioPath}/shoot.ogg`);
+        this.load.audio('enemyShoot', `${audioPath}/enemy_shoot.ogg`);
+        this.load.audio('explosion', `${audioPath}/explosion.ogg`);
+        this.load.audio('explosionBig', `${audioPath}/explosion_big.ogg`);
+        this.load.audio('hit', `${audioPath}/hit.ogg`);
+        this.load.audio('collect', `${audioPath}/collect.ogg`);
+        this.load.audio('powerup', `${audioPath}/powerup.ogg`);
     }
 
     loadSpaceRageAssets() {
