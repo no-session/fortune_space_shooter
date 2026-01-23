@@ -187,9 +187,10 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     takeDamage(amount) {
         if (this.invincible || this.isDying) return;
-        
+        if (!this.scene || !this.scene.time) return; // Safety check
+
         this.health -= amount;
-        
+
         // Brief invincibility after taking damage
         this.invincible = true;
         this.scene.time.delayedCall(200, () => {
@@ -197,16 +198,18 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
                 this.invincible = false;
             }
         });
-        
+
         // Flash effect
         this.setTint(0xff0000);
         this.scene.time.delayedCall(100, () => {
             this.clearTint();
         });
-        
+
         // Screen shake
-        this.scene.cameras.main.shake(100, 0.01);
-        
+        if (this.scene.cameras && this.scene.cameras.main) {
+            this.scene.cameras.main.shake(100, 0.01);
+        }
+
         if (this.health <= 0) {
             this.health = 0;
             this.die();
