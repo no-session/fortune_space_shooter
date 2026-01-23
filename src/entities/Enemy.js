@@ -138,26 +138,30 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     die() {
         // Create explosion animation with defensive check
-        if (this.scene.textures.exists('explosion1_1')) {
+        if (this.scene && this.scene.textures && this.scene.textures.exists('explosion1_1')) {
             const explosion = this.scene.add.sprite(this.x, this.y, 'explosion1_1');
             explosion.setScale(1);
             explosion.setDepth(150);
-            
-            if (this.scene.anims.exists('explode_small')) {
+
+            if (this.scene.anims && this.scene.anims.exists('explode_small')) {
                 explosion.play('explode_small');
                 explosion.on('animationcomplete', () => {
                     explosion.destroy();
                 });
             } else {
                 // Fallback: destroy after a short delay
-                this.scene.time.delayedCall(300, () => {
+                if (this.scene.time) {
+                    this.scene.time.delayedCall(300, () => {
+                        explosion.destroy();
+                    });
+                } else {
                     explosion.destroy();
-                });
+                }
             }
         }
-        
+
         // Play explosion sound
-        if (this.scene.soundManager) {
+        if (this.scene && this.scene.soundManager) {
             this.scene.soundManager.playExplosion();
         }
         
