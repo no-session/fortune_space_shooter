@@ -153,9 +153,9 @@ export default class GameScene extends Phaser.Scene {
             this.enemyBullets,
             this.player,
             (bullet, player) => {
-                if (bullet.active && player.active && !player.invincible && !player.isDying) {
+                if (bullet.active && player.active && !this.player.invincible && !this.player.isDying) {
                     bullet.destroy();
-                    player.takeDamage(10);
+                    this.player.takeDamage(10);
                     if (!this.player.isAlive()) {
                         this.triggerGameOver();
                     }
@@ -168,9 +168,9 @@ export default class GameScene extends Phaser.Scene {
             this.enemies,
             this.player,
             (enemy, player) => {
-                if (enemy.active && player.active && !player.invincible && !player.isDying) {
+                if (enemy.active && player.active && !this.player.invincible && !this.player.isDying) {
                     enemy.die();
-                    player.takeDamage(20);
+                    this.player.takeDamage(20);
                     if (!this.player.isAlive()) {
                         this.triggerGameOver();
                     }
@@ -318,9 +318,9 @@ export default class GameScene extends Phaser.Scene {
                         boss.bullets,
                         this.player,
                         (bullet, player) => {
-                            if (bullet.active && player.active && !player.invincible && !player.isDying) {
+                            if (bullet.active && player.active && !this.player.invincible && !this.player.isDying) {
                                 bullet.destroy();
-                                player.takeDamage(15);
+                                this.player.takeDamage(15);
                                 if (!this.player.isAlive()) {
                                     this.triggerGameOver();
                                 }
