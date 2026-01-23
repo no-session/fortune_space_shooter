@@ -68,6 +68,11 @@ export default class BootScene extends Phaser.Scene {
             assetText.destroy();
         });
 
+        // Log loading errors
+        this.load.on('loaderror', (file) => {
+            console.error('Failed to load asset:', file.key, file.src);
+        });
+
         // Load all SpaceRage assets
         this.loadSpaceRageAssets();
     }
@@ -161,93 +166,79 @@ export default class BootScene extends Phaser.Scene {
     }
 
     createAnimations() {
+        // Helper function to check if all textures exist
+        const texturesExist = (keys) => {
+            return keys.every(key => this.textures.exists(key));
+        };
+
         // Explosion animation 1 (small)
-        this.anims.create({
-            key: 'explode_small',
-            frames: [
-                { key: 'explosion1_1' },
-                { key: 'explosion1_2' },
-                { key: 'explosion1_3' },
-                { key: 'explosion1_4' },
-                { key: 'explosion1_5' },
-                { key: 'explosion1_6' },
-                { key: 'explosion1_7' },
-                { key: 'explosion1_8' },
-                { key: 'explosion1_9' },
-                { key: 'explosion1_10' },
-                { key: 'explosion1_11' }
-            ],
-            frameRate: 20,
-            repeat: 0
-        });
-        
+        const explosion1Keys = ['explosion1_1', 'explosion1_2', 'explosion1_3', 'explosion1_4', 'explosion1_5', 'explosion1_6', 'explosion1_7', 'explosion1_8', 'explosion1_9', 'explosion1_10', 'explosion1_11'];
+        if (texturesExist(explosion1Keys)) {
+            this.anims.create({
+                key: 'explode_small',
+                frames: explosion1Keys.map(key => ({ key })),
+                frameRate: 20,
+                repeat: 0
+            });
+        } else {
+            console.warn('Skipping explode_small animation - missing textures');
+        }
+
+
         // Explosion animation 2 (medium)
-        this.anims.create({
-            key: 'explode_medium',
-            frames: [
-                { key: 'explosion2_1' },
-                { key: 'explosion2_2' },
-                { key: 'explosion2_3' },
-                { key: 'explosion2_4' },
-                { key: 'explosion2_5' },
-                { key: 'explosion2_6' },
-                { key: 'explosion2_7' },
-                { key: 'explosion2_8' },
-                { key: 'explosion2_9' }
-            ],
-            frameRate: 18,
-            repeat: 0
-        });
-        
+        const explosion2Keys = ['explosion2_1', 'explosion2_2', 'explosion2_3', 'explosion2_4', 'explosion2_5', 'explosion2_6', 'explosion2_7', 'explosion2_8', 'explosion2_9'];
+        if (texturesExist(explosion2Keys)) {
+            this.anims.create({
+                key: 'explode_medium',
+                frames: explosion2Keys.map(key => ({ key })),
+                frameRate: 18,
+                repeat: 0
+            });
+        } else {
+            console.warn('Skipping explode_medium animation - missing textures');
+        }
+
+
         // Explosion animation 3 (large - for bosses)
-        this.anims.create({
-            key: 'explode_large',
-            frames: [
-                { key: 'explosion3_1' },
-                { key: 'explosion3_2' },
-                { key: 'explosion3_3' },
-                { key: 'explosion3_4' },
-                { key: 'explosion3_5' },
-                { key: 'explosion3_6' },
-                { key: 'explosion3_7' },
-                { key: 'explosion3_8' },
-                { key: 'explosion3_9' }
-            ],
-            frameRate: 15,
-            repeat: 0
-        });
-        
+        const explosion3Keys = ['explosion3_1', 'explosion3_2', 'explosion3_3', 'explosion3_4', 'explosion3_5', 'explosion3_6', 'explosion3_7', 'explosion3_8', 'explosion3_9'];
+        if (texturesExist(explosion3Keys)) {
+            this.anims.create({
+                key: 'explode_large',
+                frames: explosion3Keys.map(key => ({ key })),
+                frameRate: 15,
+                repeat: 0
+            });
+        } else {
+            console.warn('Skipping explode_large animation - missing textures');
+        }
+
+
         // Exhaust animation
-        this.anims.create({
-            key: 'exhaust',
-            frames: [
-                { key: 'exhaust_1' },
-                { key: 'exhaust_2' },
-                { key: 'exhaust_3' },
-                { key: 'exhaust_4' },
-                { key: 'exhaust_5' }
-            ],
-            frameRate: 15,
-            repeat: -1
-        });
-        
+        const exhaustKeys = ['exhaust_1', 'exhaust_2', 'exhaust_3', 'exhaust_4', 'exhaust_5'];
+        if (texturesExist(exhaustKeys)) {
+            this.anims.create({
+                key: 'exhaust',
+                frames: exhaustKeys.map(key => ({ key })),
+                frameRate: 15,
+                repeat: -1
+            });
+        } else {
+            console.warn('Skipping exhaust animation - missing textures');
+        }
+
+
         // Mine rotation animation
-        this.anims.create({
-            key: 'mine_rotate',
-            frames: [
-                { key: 'mine_1' },
-                { key: 'mine_2' },
-                { key: 'mine_3' },
-                { key: 'mine_4' },
-                { key: 'mine_5' },
-                { key: 'mine_6' },
-                { key: 'mine_7' },
-                { key: 'mine_8' },
-                { key: 'mine_9' }
-            ],
-            frameRate: 10,
-            repeat: -1
-        });
+        const mineKeys = ['mine_1', 'mine_2', 'mine_3', 'mine_4', 'mine_5', 'mine_6', 'mine_7', 'mine_8', 'mine_9'];
+        if (texturesExist(mineKeys)) {
+            this.anims.create({
+                key: 'mine_rotate',
+                frames: mineKeys.map(key => ({ key })),
+                frameRate: 10,
+                repeat: -1
+            });
+        } else {
+            console.warn('Skipping mine_rotate animation - missing textures');
+        }
     }
 
     createCollectibleGraphics() {
