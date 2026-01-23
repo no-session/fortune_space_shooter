@@ -94,6 +94,13 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
             return;
         }
 
+        // SAFETY: If player is alive but invisible, force visibility
+        if (this.lives > 0 && !this.isDying && this.alpha < 0.3) {
+            console.warn('Player became invisible! Forcing visibility...');
+            this.setAlpha(1);
+            this.setVisible(true);
+        }
+
         // Movement
         let velocityX = 0;
         let velocityY = 0;
@@ -236,50 +243,73 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         }
 
         if (this.lives > 0) {
-            // Hide player temporarily
+            // Hide player temporarily during death animation
             this.setAlpha(0);
+            this.setVisible(false);
+
+            console.log(`Player died. Lives remaining: ${this.lives}. Respawning...`);
 
             // Respawn after short delay
             if (this.scene && this.scene.time) {
                 this.scene.time.delayedCall(500, () => {
+                    console.log('Respawning player...');
+
+                    // Reset player state
                     this.health = this.maxHealth;
                     this.setPosition(this.scene.scale.width / 2, this.scene.scale.height - 50);
                     this.isDying = false;
-                    this.setAlpha(1); // Make sure player is visible
+
+                    // FORCE visibility
+                    this.setAlpha(1);
                     this.setActive(true);
                     this.setVisible(true);
+
+                    console.log('Player respawned. Alpha:', this.alpha, 'Visible:', this.visible);
 
                     // Stop any existing blink tweens first
                     if (this.blinkTween && this.blinkTween.isPlaying()) {
                         this.blinkTween.stop();
                     }
 
-                    // Blink effect during invincibility
+                    // Blink effect during invincibility (NO alpha below 0.5)
                     this.blinkTween = this.scene.tweens.add({
                         targets: this,
-                        alpha: { from: 0.4, to: 1.0 },
-                        duration: 100,
-                        repeat: 15,
+                        alpha: { from: 0.5, to: 1.0 },
+                        duration: 150,
+                        repeat: 10,
                         yoyo: true,
+                        onStart: () => {
+                            console.log('Blink tween started');
+                        },
                         onComplete: () => {
-                            // Ensure alpha is reset when tween completes
-                            if (this.active && !this.isDying) {
+                            console.log('Blink tween completed');
+                            // FORCE full visibility when tween completes
+                            if (this.active) {
                                 this.setAlpha(1);
                                 this.setVisible(true);
+                                console.log('Blink complete. Alpha reset to 1');
                             }
                         }
                     });
 
+                    // End invincibility after 2 seconds
                     this.scene.time.delayedCall(2000, () => {
+                        console.log('Invincibility ending...');
                         this.invincible = false;
-                        if (this.active && !this.isDying) {
+
+                        // FORCE full visibility
+                        if (this.active) {
                             this.setAlpha(1);
                             this.setVisible(true);
                         }
+
+                        // Stop tween if still playing
                         if (this.blinkTween && this.blinkTween.isPlaying()) {
                             this.blinkTween.stop();
                         }
                         this.blinkTween = null;
+
+                        console.log('Player fully visible. Alpha:', this.alpha);
                     });
                 });
             }
