@@ -23,11 +23,20 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
         this.collected = false; // Prevent multiple collections
         this.tweens = []; // Store tweens for cleanup
 
+        // Lifetime management - collectibles fade out after 5 seconds
+        this.lifetime = 5000;
+        this.createdAt = scene.time.now;
+        this.isFading = false;
+
         // Set velocity downward with slight drift
         const drift = (Math.random() - 0.5) * 50;
         if (this.body) {
             this.setVelocity(drift, this.speed);
         }
+
+        // Magnetic attraction settings
+        this.magnetRange = 80; // pixels
+        this.magnetStrength = 400; // speed when attracted
         
         // Visual effects
         this.setScale(0.8);
@@ -56,6 +65,48 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
             // Add glow effect for fortune coins
             if (type === COLLECTIBLE_TYPES.FORTUNE_COIN) {
                 this.setTint(0xffd700);
+            }
+        }
+    }
+
+    update(player) {
+        if (this.collected || !this.active) return;
+
+        const currentTime = this.scene.time.now;
+        const age = currentTime - this.createdAt;
+
+        // Fade out after lifetime expires
+        if (age > this.lifetime && !this.isFading) {
+            this.isFading = true;
+            this.scene.tweens.add({
+                targets: this,
+                alpha: 0,
+                duration: 500,
+                onComplete: () => {
+                    if (!this.collected) {
+                        this.destroy();
+                    }
+                }
+            });
+        }
+
+        // Magnetic attraction to player
+        if (player && player.active && player.body && !this.isFading) {
+            const distance = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
+
+            if (distance < this.magnetRange) {
+                // Calculate direction to player
+                const angle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
+
+                // Stronger attraction when closer
+                const strength = this.magnetStrength * (1 - distance / this.magnetRange);
+
+                if (this.body) {
+                    this.setVelocity(
+                        Math.cos(angle) * strength,
+                        Math.sin(angle) * strength
+                    );
+                }
             }
         }
     }

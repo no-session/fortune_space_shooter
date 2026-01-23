@@ -341,6 +341,35 @@ export default class GameScene extends Phaser.Scene {
         for (let i = collectiblesList.length - 1; i >= 0; i--) {
             const collectible = collectiblesList[i];
             if (collectible && collectible.active && !collectible.collected) {
+                // Update collectible (handles lifetime, fading, magnetic attraction)
+                if (collectible.update) {
+                    collectible.update(this.player);
+                }
+
+                // Manual distance-based collection (backup if physics overlap fails)
+                if (this.player && this.player.active && this.player.body) {
+                    const distance = Phaser.Math.Distance.Between(
+                        collectible.x, collectible.y,
+                        this.player.x, this.player.y
+                    );
+                    if (distance < 30) {
+                        // Collect it manually
+                        collectible.collected = true;
+                        if (this.soundManager) {
+                            this.soundManager.playCollect();
+                        }
+                        const value = collectible.value || 10;
+                        this.scoreManager.addCollectible(value, this.game.getTime());
+                        this.updateUI();
+                        if (typeof collectible.collect === 'function') {
+                            collectible.collect();
+                        } else {
+                            collectible.destroy();
+                        }
+                        continue;
+                    }
+                }
+
                 // Check if off screen
                 if (collectible.y > this.scale.height + 50) {
                     collectible.destroy();
