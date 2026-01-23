@@ -221,19 +221,28 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
     }
 
     die() {
-        // Multiple explosion animations
+        // Multiple explosion animations with defensive checks
         for (let i = 0; i < 5; i++) {
             const delay = i * 150;
             this.scene.time.delayedCall(delay, () => {
+                if (!this.scene.textures.exists('explosion3_1')) return;
+                
                 const offsetX = Phaser.Math.Between(-80, 80);
                 const offsetY = Phaser.Math.Between(-40, 40);
                 const explosion = this.scene.add.sprite(this.x + offsetX, this.y + offsetY, 'explosion3_1');
                 explosion.setScale(1.5);
                 explosion.setDepth(200);
-                explosion.play('explode_large');
-                explosion.on('animationcomplete', () => {
-                    explosion.destroy();
-                });
+                
+                if (this.scene.anims.exists('explode_large')) {
+                    explosion.play('explode_large');
+                    explosion.on('animationcomplete', () => {
+                        explosion.destroy();
+                    });
+                } else {
+                    this.scene.time.delayedCall(300, () => {
+                        explosion.destroy();
+                    });
+                }
             });
         }
         

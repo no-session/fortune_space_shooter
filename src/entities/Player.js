@@ -54,10 +54,23 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     createExhaust() {
         // Create exhaust sprite behind the player
+        // Check if the texture exists before creating the sprite
+        if (!this.scene.textures.exists('exhaust_1')) {
+            console.warn('Exhaust texture not loaded, skipping exhaust effect');
+            this.exhaust = null;
+            return;
+        }
+        
         this.exhaust = this.scene.add.sprite(this.x, this.y + 30, 'exhaust_1');
         this.exhaust.setScale(0.6);
         this.exhaust.setDepth(99);
-        this.exhaust.play('exhaust');
+        
+        // Check if animation exists before playing
+        if (this.scene.anims.exists('exhaust')) {
+            this.exhaust.play('exhaust');
+        } else {
+            console.warn('Exhaust animation not found');
+        }
     }
 
     setupInput() {
@@ -243,13 +256,28 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     createDeathExplosion() {
+        // Check if explosion texture exists
+        if (!this.scene.textures.exists('explosion1_1')) {
+            console.warn('Explosion texture not loaded');
+            return;
+        }
+        
         const explosion = this.scene.add.sprite(this.x, this.y, 'explosion1_1');
         explosion.setScale(1.5);
         explosion.setDepth(200);
-        explosion.play('explode_medium');
-        explosion.on('animationcomplete', () => {
-            explosion.destroy();
-        });
+        
+        // Check if animation exists before playing
+        if (this.scene.anims.exists('explode_medium')) {
+            explosion.play('explode_medium');
+            explosion.on('animationcomplete', () => {
+                explosion.destroy();
+            });
+        } else {
+            // Fallback: destroy after a short delay
+            this.scene.time.delayedCall(300, () => {
+                explosion.destroy();
+            });
+        }
     }
 
     heal(amount) {
