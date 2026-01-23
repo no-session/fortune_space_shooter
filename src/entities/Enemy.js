@@ -111,11 +111,17 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     shoot() {
         const bullet = this.scene.physics.add.sprite(this.x, this.y + 30, 'bullet-enemy');
-        bullet.setVelocityY(this.stats.shootInterval ? 300 : 400);
+
+        // Set bullet velocity downward
+        if (bullet.body) {
+            bullet.setVelocityY(400); // Move downward toward player
+            bullet.body.allowGravity = false;
+        }
+
         bullet.setScale(1);
         bullet.setDepth(50);
         this.bullets.add(bullet);
-        
+
         // Play shoot sound if available
         if (this.scene.soundManager) {
             this.scene.soundManager.playEnemyShoot();
