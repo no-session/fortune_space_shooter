@@ -473,9 +473,14 @@ export default class GameScene extends Phaser.Scene {
             duration: 1500,
             onComplete: () => {
                 waveText.destroy();
-                
+
                 // If boss wave, go to shop
                 if (this.waveManager.isBossWave()) {
+                    // Start the next wave first to prevent re-triggering
+                    this.waveManager.startWave(currentWave + 1);
+                    this.waveTransitioning = false;
+
+                    // Then launch shop
                     this.scene.pause();
                     this.scene.launch('ShopScene', {
                         score: this.scoreManager.getScore(),
@@ -484,9 +489,8 @@ export default class GameScene extends Phaser.Scene {
                 } else {
                     // Start next wave
                     this.waveManager.startWave(currentWave + 1);
+                    this.waveTransitioning = false;
                 }
-                
-                this.waveTransitioning = false;
             }
         });
     }

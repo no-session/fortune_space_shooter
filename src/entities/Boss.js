@@ -221,58 +221,75 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
     }
 
     die() {
+        // Store references before scheduling delayed calls
+        const scene = this.scene;
+        const bossX = this.x;
+        const bossY = this.y;
+
         // Multiple explosion animations with defensive checks
         for (let i = 0; i < 5; i++) {
             const delay = i * 150;
-            this.scene.time.delayedCall(delay, () => {
-                if (!this.scene.textures.exists('explosion3_1')) return;
-                
+            if (!scene || !scene.time) continue;
+
+            scene.time.delayedCall(delay, () => {
+                // Check if scene still exists and is valid
+                if (!scene || !scene.textures || !scene.textures.exists('explosion3_1')) return;
+
                 const offsetX = Phaser.Math.Between(-80, 80);
                 const offsetY = Phaser.Math.Between(-40, 40);
-                const explosion = this.scene.add.sprite(this.x + offsetX, this.y + offsetY, 'explosion3_1');
+                const explosion = scene.add.sprite(bossX + offsetX, bossY + offsetY, 'explosion3_1');
                 explosion.setScale(1.5);
                 explosion.setDepth(200);
-                
-                if (this.scene.anims.exists('explode_large')) {
+
+                if (scene.anims && scene.anims.exists('explode_large')) {
                     explosion.play('explode_large');
                     explosion.on('animationcomplete', () => {
                         explosion.destroy();
                     });
                 } else {
-                    this.scene.time.delayedCall(300, () => {
+                    // Fallback: destroy after delay
+                    if (scene.time) {
+                        scene.time.delayedCall(300, () => {
+                            explosion.destroy();
+                        });
+                    } else {
                         explosion.destroy();
-                    });
+                    }
                 }
             });
         }
-        
-        // Screen shake
-        this.scene.cameras.main.shake(800, 0.03);
-        this.scene.cameras.main.flash(500, 255, 200, 100);
-        
-        // Play explosion sound
-        if (this.scene.soundManager) {
-            this.scene.soundManager.playExplosion();
+
+        // Screen shake and flash effects
+        if (scene && scene.cameras && scene.cameras.main) {
+            scene.cameras.main.shake(800, 0.03);
+            scene.cameras.main.flash(500, 255, 200, 100);
         }
-        
+
+        // Play explosion sound
+        if (scene && scene.soundManager) {
+            scene.soundManager.playExplosion();
+        }
+
         // Remove health bar
         if (this.healthBarBg) this.healthBarBg.destroy();
         if (this.healthBarBorder) this.healthBarBorder.destroy();
         if (this.healthBar) this.healthBar.destroy();
         if (this.healthText) this.healthText.destroy();
-        
+
         // Destroy bullets
         if (this.bullets) {
             this.bullets.clear(true, true);
         }
-        
+
         // Trigger boss defeated after explosions
-        this.scene.time.delayedCall(800, () => {
-            if (this.scene && this.scene.onBossDefeated) {
-                this.scene.onBossDefeated();
-            }
-        });
-        
+        if (scene && scene.time) {
+            scene.time.delayedCall(800, () => {
+                if (scene && scene.onBossDefeated) {
+                    scene.onBossDefeated();
+                }
+            });
+        }
+
         this.destroy();
     }
 }
