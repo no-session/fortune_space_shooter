@@ -345,6 +345,7 @@ export default class GameScene extends Phaser.Scene {
         
         // Check for wave completion (only if not already transitioning)
         if (this.waveManager.isWaveComplete() && !this.waveTransitioning) {
+            console.log('Wave complete! Starting next wave transition...');
             this.nextWave();
         }
         

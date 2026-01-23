@@ -210,7 +210,20 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     onWorldBounds() {
         // Handle world bounds collision
         if (this.body && this.body.blocked.down) {
-            // Enemy reached bottom - damage player or remove
+            // Enemy reached bottom - count it and remove
+            console.log('Enemy left screen (bottom)');
+
+            // Remove from formation if in one
+            if (this.formation) {
+                this.formation.removeEnemy(this);
+            }
+
+            // Notify wave manager that enemy is gone
+            if (this.scene && this.scene.waveManager) {
+                this.scene.waveManager.onEnemyKilled();
+            }
+
+            // Destroy enemy
             this.destroy();
         }
     }

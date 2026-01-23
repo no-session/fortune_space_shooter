@@ -10,13 +10,16 @@ export default class WaveManager {
     }
 
     startWave(waveNumber) {
+        console.log(`Starting wave ${waveNumber}...`);
         this.currentWave = waveNumber;
         this.waveComplete = false;
         this.bossWave = waveNumber % 5 === 0 && waveNumber > 0;
-        
+
         if (this.bossWave) {
+            console.log('This is a boss wave!');
             this.startBossWave();
         } else {
+            console.log('This is a normal wave');
             this.startNormalWave();
         }
     }
@@ -88,8 +91,10 @@ export default class WaveManager {
 
     onEnemyKilled() {
         this.enemiesRemaining--;
+        console.log(`Enemy killed. Enemies remaining: ${this.enemiesRemaining}`);
         if (this.enemiesRemaining <= 0) {
             this.waveComplete = true;
+            console.log('Wave marked as complete!');
         }
     }
 
