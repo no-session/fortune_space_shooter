@@ -66,21 +66,24 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     update(time) {
+        // Safety check - don't update if physics body doesn't exist
+        if (!this.body || !this.active) return;
+
         // Update banking animation based on horizontal movement
         this.updateBankingAnimation();
-        
+
         // Shooting for fighters
         if (this.stats.shoots && time > this.lastShot) {
             this.shoot();
             this.lastShot = time + this.shootInterval;
         }
-        
+
         // Update position based on formation or individual movement
         if (this.formation) {
             // Position is managed by formation
             return;
         }
-        
+
         // Individual movement
         this.setVelocity(this.velocityX, this.velocityY);
     }

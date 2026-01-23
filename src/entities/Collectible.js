@@ -22,10 +22,12 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
         this.speed = GAME_CONFIG.COLLECTIBLE_SPEED;
         this.collected = false; // Prevent multiple collections
         this.tweens = []; // Store tweens for cleanup
-        
+
         // Set velocity downward with slight drift
         const drift = (Math.random() - 0.5) * 50;
-        this.setVelocity(drift, this.speed);
+        if (this.body) {
+            this.setVelocity(drift, this.speed);
+        }
         
         // Visual effects
         this.setScale(0.8);

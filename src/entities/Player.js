@@ -85,34 +85,37 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     update(time) {
+        // Safety check - don't update if physics body doesn't exist
+        if (!this.body || !this.active) return;
+
         // Don't update if dying
         if (this.isDying) {
             this.setVelocity(0, 0);
             return;
         }
-        
+
         // Movement
         let velocityX = 0;
         let velocityY = 0;
-        
+
         if (this.cursors.left.isDown || this.wasd.A.isDown) {
             velocityX = -this.speed;
         } else if (this.cursors.right.isDown || this.wasd.D.isDown) {
             velocityX = this.speed;
         }
-        
+
         if (this.cursors.up.isDown || this.wasd.W.isDown) {
             velocityY = -this.speed;
         } else if (this.cursors.down.isDown || this.wasd.S.isDown) {
             velocityY = this.speed;
         }
-        
+
         // Normalize diagonal movement
         if (velocityX !== 0 && velocityY !== 0) {
             velocityX *= 0.707;
             velocityY *= 0.707;
         }
-        
+
         this.setVelocity(velocityX, velocityY);
         
         // Update banking animation based on horizontal movement
