@@ -36,10 +36,10 @@ export default class ScoreManager {
             this.comboMultiplier = 1.1;
             this.comboTimer = this.comboTimeout;
         }
-        
+
         this.lastCollectibleTime = time;
         this.maxCombo = Math.max(this.maxCombo, this.combo);
-        
+
         return this.addScore(value);
     }
 

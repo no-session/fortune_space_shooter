@@ -156,7 +156,7 @@ export default class GameScene extends Phaser.Scene {
                 if (bullet.active && player.active && !player.invincible && !player.isDying) {
                     bullet.destroy();
                     player.takeDamage(10);
-                    if (!player.isAlive()) {
+                    if (!this.player.isAlive()) {
                         this.triggerGameOver();
                     }
                 }
@@ -171,7 +171,7 @@ export default class GameScene extends Phaser.Scene {
                 if (enemy.active && player.active && !player.invincible && !player.isDying) {
                     enemy.die();
                     player.takeDamage(20);
-                    if (!player.isAlive()) {
+                    if (!this.player.isAlive()) {
                         this.triggerGameOver();
                     }
                 }
@@ -182,20 +182,36 @@ export default class GameScene extends Phaser.Scene {
         this.physics.add.overlap(
             this.collectibles,
             this.player,
-            (collectible, player) => {
+            (obj1, obj2) => {
+                // Phaser can swap parameter order - identify which is which
+                let collectible, player;
+                if (obj1 === this.player || obj1?.constructor?.name === 'Player') {
+                    player = obj1;
+                    collectible = obj2;
+                } else {
+                    collectible = obj1;
+                    player = obj2;
+                }
+
                 // Check collected flag first to prevent duplicate processing
-                if (!collectible || !player) return;
-                if (collectible.collected) return;
-                if (!collectible.active || !player.active) return;
-                
+                if (!collectible || !player) {
+                    return;
+                }
+                if (collectible.collected) {
+                    return;
+                }
+                if (!collectible.active || !player.active) {
+                    return;
+                }
+
                 // Mark as collected immediately
                 collectible.collected = true;
-                
+
                 // Add score
                 const value = collectible.value || 10;
                 this.scoreManager.addCollectible(value, this.game.getTime());
                 this.updateUI();
-                
+
                 // Collect the item (handles effects and destruction)
                 if (typeof collectible.collect === 'function') {
                     collectible.collect();
@@ -305,7 +321,7 @@ export default class GameScene extends Phaser.Scene {
                             if (bullet.active && player.active && !player.invincible && !player.isDying) {
                                 bullet.destroy();
                                 player.takeDamage(15);
-                                if (!player.isAlive()) {
+                                if (!this.player.isAlive()) {
                                     this.triggerGameOver();
                                 }
                             }

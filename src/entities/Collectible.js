@@ -62,28 +62,28 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
         // Prevent multiple collections
         if (this.collected) return;
         this.collected = true;
-        
+
         // Store values before cleanup
         const x = this.x;
         const y = this.y;
         const scene = this.scene;
         const type = this.type;
         const value = this.value;
-        
+
         // Stop all tweens immediately
         this.stopTweens();
-        
+
         // Play collect sound
         if (scene.soundManager) {
             scene.soundManager.playCollect();
         }
-        
+
         // Show score popup
         this.showScorePopup(scene, x, y, value, type);
-        
+
         // Create collection effect with particles
         this.createParticleEffect(scene, x, y, type);
-        
+
         // Destroy the collectible
         this.destroy();
     }
