@@ -43,22 +43,27 @@ export default class CircleFormation {
         // Move down
         this.centerY += this.velocityY * delta;
         
-        // Update enemy positions
+        // Update enemy positions (reverse iteration to safely remove during loop)
         const angleStep = (Math.PI * 2) / Math.max(this.enemies.length, 1);
-        this.enemies.forEach((enemy, index) => {
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            const enemy = this.enemies[i];
             if (enemy && enemy.active) {
-                const angle = index * angleStep + this.rotation;
+                const angle = i * angleStep + this.rotation;
                 const x = this.centerX + Math.cos(angle) * this.radius;
                 const y = this.centerY + Math.sin(angle) * this.radius;
                 enemy.setPosition(x, y);
-                
+
                 // Remove enemy if it goes off screen
                 if (enemy.y > this.scene.scale.height + 50) {
+                    // Notify wave manager before destroying
+                    if (this.scene.waveManager) {
+                        this.scene.waveManager.onEnemyKilled();
+                    }
                     enemy.destroy();
                     this.removeEnemy(enemy);
                 }
             }
-        });
+        }
     }
 
     removeEnemy(enemy) {

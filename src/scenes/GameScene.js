@@ -447,7 +447,12 @@ export default class GameScene extends Phaser.Scene {
     nextWave() {
         if (this.waveTransitioning) return;
         this.waveTransitioning = true;
-        
+
+        // Clear all enemy bullets between waves (gives player a breather)
+        if (this.enemyBullets) {
+            this.enemyBullets.clear(true, true);
+        }
+
         const currentWave = this.waveManager.getCurrentWave();
         
         // Show wave complete message

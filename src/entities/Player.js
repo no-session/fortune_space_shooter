@@ -50,6 +50,15 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         
         // Set up input
         this.setupInput();
+
+        // Override setActive to log unexpected deactivation
+        const originalSetActive = this.setActive.bind(this);
+        this.setActive = (value) => {
+            if (!value && this.lives > 0 && !this.isDying) {
+                console.error('WARNING: setActive(false) called on living player!', new Error().stack);
+            }
+            return originalSetActive(value);
+        };
     }
 
     createExhaust() {
@@ -86,7 +95,39 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     update(time) {
         // Safety check - don't update if physics body doesn't exist
-        if (!this.body || !this.active) return;
+        if (!this.body || !this.active) {
+            // Only log once to avoid console spam
+            if (!this._bodyErrorLogged) {
+                console.warn('Player body or active is false, attempting recovery...', {
+                    body: !!this.body,
+                    active: this.active,
+                    lives: this.lives,
+                    isDying: this.isDying
+                });
+                this._bodyErrorLogged = true;
+            }
+
+            // Attempt to recover if player should be alive
+            if (this.lives > 0 && !this.isDying && this.scene) {
+                // Recreate physics body if missing
+                if (!this.body) {
+                    this.scene.physics.add.existing(this);
+                    this.setCollideWorldBounds(true);
+                }
+                // Reactivate if inactive
+                if (!this.active) {
+                    this.setActive(true);
+                }
+                this.setVisible(true);
+                this.setAlpha(1);
+                console.log('Player recovered successfully');
+                this._bodyErrorLogged = false;
+            }
+            return;
+        }
+
+        // Reset error flag when everything is working
+        this._bodyErrorLogged = false;
 
         // Don't update if dying
         if (this.isDying) {
@@ -94,11 +135,49 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
             return;
         }
 
-        // SAFETY: If player is alive but invisible, force visibility
-        if (this.lives > 0 && !this.isDying && this.alpha < 0.3) {
-            console.warn('Player became invisible! Forcing visibility...');
-            this.setAlpha(1);
-            this.setVisible(true);
+        // CRITICAL VISIBILITY CHECK - Log any visibility issues
+        if (this.lives > 0 && !this.isDying) {
+            const isVisible = this.visible;
+            const currentAlpha = this.alpha;
+
+            // If player should be visible but isn't, log everything
+            if (!isVisible || currentAlpha < 0.1) {
+                console.error('CRITICAL: Player is invisible!', {
+                    visible: isVisible,
+                    alpha: currentAlpha,
+                    lives: this.lives,
+                    isDying: this.isDying,
+                    invincible: this.invincible,
+                    active: this.active,
+                    x: this.x,
+                    y: this.y,
+                    blinkTweenPlaying: this.blinkTween ? this.blinkTween.isPlaying() : false
+                });
+
+                // FORCE visibility
+                this.setAlpha(1);
+                this.setVisible(true);
+                this.setActive(true);
+                console.error('Forced player to be visible!');
+            }
+
+            // SAFETY: If player is alive and not invincible, ensure full visibility
+            // If invincible, ensure alpha is at least 0.5 (blink range)
+            if (!this.invincible && this.alpha < 1.0) {
+                console.warn('Player not invincible but not fully visible! Forcing alpha to 1', {
+                    alpha: this.alpha,
+                    visible: this.visible
+                });
+                this.setAlpha(1);
+                this.setVisible(true);
+            } else if (this.invincible && this.alpha < 0.5) {
+                console.warn('Player invincible but too transparent! Forcing alpha to 0.5', {
+                    alpha: this.alpha,
+                    visible: this.visible
+                });
+                this.setAlpha(0.5);
+                this.setVisible(true);
+            }
         }
 
         // Movement
@@ -247,6 +326,11 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
             this.setAlpha(0);
             this.setVisible(false);
 
+            // IMPORTANT: Also hide the exhaust sprite
+            if (this.exhaust) {
+                this.exhaust.setVisible(false);
+            }
+
             console.log(`Player died. Lives remaining: ${this.lives}. Respawning...`);
 
             // Respawn after short delay
@@ -264,11 +348,20 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
                     this.setActive(true);
                     this.setVisible(true);
 
+                    // IMPORTANT: Also show the exhaust sprite
+                    if (this.exhaust) {
+                        this.exhaust.setVisible(true);
+                    }
+
                     console.log('Player respawned. Alpha:', this.alpha, 'Visible:', this.visible);
 
                     // Stop any existing blink tweens first
-                    if (this.blinkTween && this.blinkTween.isPlaying()) {
-                        this.blinkTween.stop();
+                    if (this.blinkTween) {
+                        if (this.blinkTween.isPlaying()) {
+                            console.warn('Stopping existing blink tween before starting new one');
+                            this.blinkTween.stop();
+                        }
+                        this.blinkTween = null;
                     }
 
                     // Blink effect during invincibility (NO alpha below 0.5)
@@ -317,6 +410,11 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
             // Game over - no more lives
             this.setAlpha(0); // Hide player
             this.isDying = false;
+
+            // IMPORTANT: Also hide the exhaust sprite
+            if (this.exhaust) {
+                this.exhaust.setVisible(false);
+            }
 
             // Trigger game over after a short delay
             if (this.scene && this.scene.time && this.scene.triggerGameOver) {

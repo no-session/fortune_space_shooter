@@ -237,4 +237,12 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.velocityX = velocityX;
         this.velocityY = velocityY;
     }
+
+    destroy() {
+        // Clean up bullets when enemy is destroyed (even if not through die())
+        if (this.bullets) {
+            this.bullets.clear(true, true);
+        }
+        super.destroy();
+    }
 }

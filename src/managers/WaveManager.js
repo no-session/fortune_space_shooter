@@ -90,9 +90,14 @@ export default class WaveManager {
     }
 
     onEnemyKilled() {
-        this.enemiesRemaining--;
-        console.log(`Enemy killed. Enemies remaining: ${this.enemiesRemaining}`);
-        if (this.enemiesRemaining <= 0) {
+        // Only decrement if there are enemies remaining (prevent negative counts)
+        if (this.enemiesRemaining > 0) {
+            this.enemiesRemaining--;
+            console.log(`Enemy killed. Enemies remaining: ${this.enemiesRemaining}`);
+        }
+
+        // Only mark complete once
+        if (this.enemiesRemaining <= 0 && !this.waveComplete) {
             this.waveComplete = true;
             console.log('Wave marked as complete!');
         }

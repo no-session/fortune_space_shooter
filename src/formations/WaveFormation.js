@@ -53,20 +53,25 @@ export default class WaveFormation {
             this.direction = -1;
         }
         
-        // Update enemy positions with sine wave
-        this.enemies.forEach((enemy, index) => {
+        // Update enemy positions with sine wave (reverse iteration to safely remove during loop)
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            const enemy = this.enemies[i];
             if (enemy && enemy.active) {
                 const offsetX = enemy.formationOffset.x;
-                const waveY = Math.sin(this.waveOffset + index * 0.5) * this.waveAmplitude;
+                const waveY = Math.sin(this.waveOffset + i * 0.5) * this.waveAmplitude;
                 enemy.setPosition(this.startX + offsetX, this.startY + waveY);
-                
+
                 // Remove enemy if it goes off screen
                 if (enemy.y > this.scene.scale.height + 50) {
+                    // Notify wave manager before destroying
+                    if (this.scene.waveManager) {
+                        this.scene.waveManager.onEnemyKilled();
+                    }
                     enemy.destroy();
                     this.removeEnemy(enemy);
                 }
             }
-        });
+        }
     }
 
     removeEnemy(enemy) {

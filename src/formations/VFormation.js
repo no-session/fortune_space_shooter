@@ -54,20 +54,25 @@ export default class VFormation {
             this.direction = -1;
         }
         
-        // Update enemy positions
-        this.enemies.forEach((enemy, index) => {
+        // Update enemy positions (reverse iteration to safely remove during loop)
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            const enemy = this.enemies[i];
             if (enemy && enemy.active) {
                 const offsetX = enemy.formationOffset.x;
                 const offsetY = enemy.formationOffset.y;
                 enemy.setPosition(this.startX + offsetX, this.startY + offsetY);
-                
+
                 // Remove enemy if it goes off screen
                 if (enemy.y > this.scene.scale.height + 50) {
+                    // Notify wave manager before destroying
+                    if (this.scene.waveManager) {
+                        this.scene.waveManager.onEnemyKilled();
+                    }
                     enemy.destroy();
                     this.removeEnemy(enemy);
                 }
             }
-        });
+        }
     }
 
     removeEnemy(enemy) {
