@@ -32,7 +32,7 @@ export const ENEMY_STATS = {
         points: 100,
         dropChance: 0.5,
         shoots: true,
-        shootInterval: 2000
+        shootInterval: 3000  // Increased from 2000ms for less aggressive early game
     },
     [ENEMY_TYPES.BOMBER]: {
         health: 40,
