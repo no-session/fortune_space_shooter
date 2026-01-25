@@ -39,8 +39,8 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
         this.lastShot = 0;
         this.bullets = scene.physics.add.group();
 
-        // Visual
-        this.setScale(1.2);
+        // Visual - scale down from 1024x1024 images to appropriate game size (~200px wide)
+        this.setScale(0.2);
         this.setCollideWorldBounds(true);
         this.setDepth(90);
 
