@@ -239,24 +239,35 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     shoot() {
         const bulletX = this.x;
         const bulletY = this.y - 30;
-        
+
         // Determine bullet texture based on weapon level
         const bulletTexture = this.weaponLevel >= 3 ? 'bullet_proton1' : 'bullet_plasma1';
-        
+
+        let shotsCreated = 0;
         if (this.bulletSpread === 1) {
             // Single bullet
             this.createBullet(bulletX, bulletY, 0, bulletTexture);
+            shotsCreated = 1;
         } else if (this.bulletSpread === 2) {
             // Two bullets side by side
             this.createBullet(bulletX - 15, bulletY, 0, bulletTexture);
             this.createBullet(bulletX + 15, bulletY, 0, bulletTexture);
+            shotsCreated = 2;
         } else if (this.bulletSpread >= 3) {
             // Three bullets with spread
             this.createBullet(bulletX, bulletY, 0, bulletTexture);
             this.createBullet(bulletX - 20, bulletY, -50, bulletTexture);
             this.createBullet(bulletX + 20, bulletY, 50, bulletTexture);
+            shotsCreated = 3;
         }
-        
+
+        // Track shots for accuracy bonus
+        if (this.scene.bonusSystem) {
+            for (let i = 0; i < shotsCreated; i++) {
+                this.scene.bonusSystem.recordShotFired();
+            }
+        }
+
         // Play shoot sound if available
         if (this.scene.soundManager) {
             this.scene.soundManager.playShoot();
@@ -280,6 +291,16 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         if (!this.active || !this.visible) return; // Don't take damage if not visible
 
         this.health -= amount;
+
+        // Break kill streak on damage
+        if (this.scene.streakManager) {
+            this.scene.streakManager.resetStreak();
+        }
+
+        // Track damage for wave bonus
+        if (this.scene.bonusSystem) {
+            this.scene.bonusSystem.recordDamageTaken();
+        }
 
         // Play hit sound
         if (this.scene.soundManager) {

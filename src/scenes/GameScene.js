@@ -7,7 +7,10 @@ import FormationManager from '../managers/FormationManager.js';
 import WaveManager from '../managers/WaveManager.js';
 import ScoreManager from '../managers/ScoreManager.js';
 import SoundManager from '../managers/SoundManager.js';
-import { COLLECTIBLE_TYPES, GAME_CONFIG } from '../utils/constants.js';
+import StreakManager from '../managers/StreakManager.js';
+import EffectManager from '../managers/EffectManager.js';
+import BonusSystem from '../systems/BonusSystem.js';
+import { COLLECTIBLE_TYPES, GAME_CONFIG, EFFECT_CONFIG } from '../utils/constants.js';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -23,6 +26,9 @@ export default class GameScene extends Phaser.Scene {
         this.waveManager = new WaveManager(this);
         this.scoreManager = new ScoreManager(this);
         this.soundManager = new SoundManager(this);
+        this.streakManager = new StreakManager(this);
+        this.effectManager = new EffectManager(this);
+        this.bonusSystem = new BonusSystem(this);
         
         // Create player
         this.player = new Player(this, this.scale.width / 2, this.scale.height - 50);
@@ -44,6 +50,7 @@ export default class GameScene extends Phaser.Scene {
         
         // Start first wave
         this.waveManager.startWave(1);
+        this.bonusSystem.startWave(1);
         
         // Pause key
         this.pauseKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
@@ -128,6 +135,7 @@ export default class GameScene extends Phaser.Scene {
             (bullet, enemy) => {
                 if (bullet.active && enemy.active) {
                     bullet.destroy();
+                    this.bonusSystem.recordShotHit(); // Track accuracy
                     enemy.takeDamage(10);
                     if (enemy.health <= 0) {
                         this.onEnemyKilled(enemy);
@@ -135,7 +143,7 @@ export default class GameScene extends Phaser.Scene {
                 }
             }
         );
-        
+
         // Player bullets vs bosses
         this.physics.add.overlap(
             this.player.bullets,
@@ -143,6 +151,7 @@ export default class GameScene extends Phaser.Scene {
             (bullet, boss) => {
                 if (bullet.active && boss.active) {
                     bullet.destroy();
+                    this.bonusSystem.recordShotHit(); // Track accuracy
                     boss.takeDamage(10);
                 }
             }
@@ -214,7 +223,8 @@ export default class GameScene extends Phaser.Scene {
 
                 // Add score
                 const value = collectible.value || 10;
-                this.scoreManager.addCollectible(value, this.game.getTime());
+                const type = collectible.type || 'coin';
+                this.scoreManager.addCollectible(value, this.game.getTime(), type);
                 this.updateUI();
 
                 // Collect the item (handles effects and destruction)
@@ -245,7 +255,15 @@ export default class GameScene extends Phaser.Scene {
             color: '#ffff00'
         });
         this.comboText.setDepth(1000);
-        
+
+        // Shop currency text (shows collectibles value for shop)
+        this.currencyText = this.add.text(10, 60, 'Shop Currency: 0', {
+            fontSize: '16px',
+            fontFamily: 'monospace',
+            color: '#ffd700'
+        });
+        this.currencyText.setDepth(1000);
+
         // Wave text
         this.waveText = this.add.text(this.scale.width - 150, 10, 'Wave: 1', {
             fontSize: '20px',
@@ -263,20 +281,62 @@ export default class GameScene extends Phaser.Scene {
         });
         this.livesText.setDepth(1000);
         this.livesText.setOrigin(0, 0);
+
+        // Kill streak text (top right)
+        this.streakText = this.add.text(this.scale.width - 150, 60, '', {
+            fontSize: '16px',
+            fontFamily: 'monospace',
+            color: '#ff00ff'
+        });
+        this.streakText.setDepth(1000);
+        this.streakText.setOrigin(0, 0);
+
+        // Accuracy text (top right)
+        this.accuracyText = this.add.text(this.scale.width - 150, 80, '', {
+            fontSize: '14px',
+            fontFamily: 'monospace',
+            color: '#888888'
+        });
+        this.accuracyText.setDepth(1000);
+        this.accuracyText.setOrigin(0, 0);
     }
 
     updateUI() {
         this.scoreText.setText(`Score: ${this.scoreManager.getScore()}`);
-        
+
         const combo = this.scoreManager.getCombo();
         if (combo > 0) {
             this.comboText.setText(`Combo: x${this.scoreManager.getComboMultiplier().toFixed(1)}`);
         } else {
             this.comboText.setText('');
         }
-        
+
+        // Update shop currency display
+        const currency = this.scoreManager.getShopCurrency();
+        this.currencyText.setText(`Shop Currency: ${currency}`);
+
         this.waveText.setText(`Wave: ${this.waveManager.getCurrentWave()}`);
         this.livesText.setText(`Lives: ${this.player.lives}`);
+
+        // Update kill streak display
+        const streak = this.streakManager.getCurrentStreak();
+        if (streak >= 3) {
+            const mult = this.streakManager.getStreakMultiplier();
+            this.streakText.setText(`Streak: ${streak}x (${mult.toFixed(1)}x)`);
+            // Color based on streak level
+            if (streak >= 20) this.streakText.setColor('#ff0000');
+            else if (streak >= 10) this.streakText.setColor('#ff00ff');
+            else if (streak >= 5) this.streakText.setColor('#00ffff');
+            else this.streakText.setColor('#ffff00');
+        } else {
+            this.streakText.setText('');
+        }
+
+        // Update accuracy display
+        const accuracy = this.bonusSystem.getAccuracyPercent();
+        if (this.bonusSystem.shotsFired > 0) {
+            this.accuracyText.setText(`Accuracy: ${accuracy}%`);
+        }
     }
 
     update(time) {
@@ -291,6 +351,20 @@ export default class GameScene extends Phaser.Scene {
         // Update managers
         this.formationManager.update(time);
         this.scoreManager.updateCombo();
+        this.streakManager.update(this.game.loop.delta);
+
+        // Graze detection for enemy bullets
+        if (this.player && this.player.active && !this.player.invincible) {
+            this.enemyBullets.children.entries.forEach(bullet => {
+                if (!bullet || !bullet.active) return;
+
+                const grazeResult = this.bonusSystem.checkGraze(bullet, this.player);
+                if (grazeResult) {
+                    this.scoreManager.addBonusScore(grazeResult.points, 'graze');
+                    this.effectManager.showGrazeEffect(grazeResult.x, grazeResult.y);
+                }
+            });
+        }
         
         // Update enemies from formations
         this.formationManager.activeFormations.forEach(formation => {
@@ -359,7 +433,8 @@ export default class GameScene extends Phaser.Scene {
                             this.soundManager.playCollect();
                         }
                         const value = collectible.value || 10;
-                        this.scoreManager.addCollectible(value, this.game.getTime());
+                        const type = collectible.type || 'coin';
+                        this.scoreManager.addCollectible(value, this.game.getTime(), type);
                         this.updateUI();
                         if (typeof collectible.collect === 'function') {
                             collectible.collect();
@@ -420,49 +495,43 @@ export default class GameScene extends Phaser.Scene {
     }
 
     onEnemyKilled(enemy) {
-        // Add score
-        this.scoreManager.addEnemyKill(enemy.points);
-        
-        // Create explosion particles
-        this.createExplosionParticles(enemy.x, enemy.y);
-        
-        // Screen shake for larger enemies
-        if (enemy.type === 'bomber' || enemy.type === 'elite') {
-            this.cameras.main.shake(100, 0.005);
+        const time = this.game.getTime();
+
+        // Record kill for streak system
+        const streakData = this.streakManager.recordKill(enemy.type, time);
+
+        // Calculate and add score with streak multiplier
+        const finalPoints = this.scoreManager.addKillScore(enemy.points, streakData.multiplier);
+
+        // Show score popup with streak info
+        this.effectManager.showScorePopup(enemy.x, enemy.y, finalPoints, {
+            color: EFFECT_CONFIG.COLOR_KILL,
+            size: streakData.streakLevel >= 5 ? EFFECT_CONFIG.POPUP_LARGE : EFFECT_CONFIG.POPUP_MEDIUM,
+            multiplier: streakData.multiplier > 1 ? streakData.multiplier : null
+        });
+
+        // Show streak milestone announcement
+        if (streakData.milestone) {
+            this.effectManager.showStreakAnnouncement(streakData.milestone);
         }
-        
+
+        // Create explosion via EffectManager
+        const explosionSize = (enemy.type === 'bomber' || enemy.type === 'elite') ? 'large' : 'medium';
+        this.effectManager.createExplosion(enemy.x, enemy.y, explosionSize);
+
         // Drop collectible
         if (Math.random() < enemy.dropChance) {
             this.dropCollectible(enemy.x, enemy.y);
         }
-        
-        // Update wave manager
+
+        // Update wave manager and UI
         this.waveManager.onEnemyKilled();
+        this.updateUI();
     }
 
     createExplosionParticles(x, y) {
-        // Create particle explosion effect
-        for (let i = 0; i < 8; i++) {
-            const angle = (Math.PI * 2 * i) / 8;
-            const particle = this.add.circle(x, y, 3, 0xff6600);
-            particle.setDepth(100);
-            
-            const distance = Phaser.Math.Between(20, 40);
-            const targetX = x + Math.cos(angle) * distance;
-            const targetY = y + Math.sin(angle) * distance;
-            
-            this.tweens.add({
-                targets: particle,
-                x: targetX,
-                y: targetY,
-                alpha: 0,
-                scale: 0,
-                duration: 300,
-                onComplete: () => {
-                    particle.destroy();
-                }
-            });
-        }
+        // Legacy method - delegate to EffectManager
+        this.effectManager.createExplosion(x, y, 'medium');
     }
 
     dropCollectible(x, y) {
@@ -509,23 +578,47 @@ export default class GameScene extends Phaser.Scene {
         });
 
         const currentWave = this.waveManager.getCurrentWave();
-        
+
+        // Calculate wave bonuses
+        const enemiesKilled = this.waveManager.getEnemiesKilledThisWave ?
+            this.waveManager.getEnemiesKilledThisWave() : this.waveManager.enemiesKilled || 0;
+        const totalEnemies = this.waveManager.getTotalEnemiesThisWave ?
+            this.waveManager.getTotalEnemiesThisWave() : this.waveManager.totalEnemies || enemiesKilled;
+
+        const bonusData = this.bonusSystem.calculateWaveBonuses(enemiesKilled, totalEnemies);
+
+        // Award bonuses to score
+        if (bonusData.waveClearPoints > 0) {
+            this.scoreManager.addBonusScore(bonusData.waveClearPoints, 'waveClear');
+        }
+        if (bonusData.accuracyPoints > 0) {
+            this.scoreManager.addBonusScore(bonusData.accuracyPoints, 'accuracy');
+        }
+        // Graze points already awarded during gameplay
+
         // Show wave complete message
         const waveText = this.add.text(
             this.scale.width / 2,
             this.scale.height / 2,
-            `Wave ${currentWave} Complete!`,
+            bonusData.perfect ? `Wave ${currentWave} PERFECT!` : `Wave ${currentWave} Complete!`,
             {
                 fontSize: '32px',
                 fontFamily: 'monospace',
-                color: '#00ffff',
+                color: bonusData.perfect ? '#00ff00' : '#00ffff',
                 stroke: '#000000',
                 strokeThickness: 4
             }
         );
         waveText.setOrigin(0.5);
         waveText.setDepth(1000);
-        
+
+        // Show bonus breakdown
+        if (bonusData.totalBonus > 0) {
+            this.effectManager.showWaveClearBonus(bonusData);
+        }
+
+        this.updateUI();
+
         // Fade out and start next wave after delay
         this.tweens.add({
             targets: waveText,
@@ -535,10 +628,14 @@ export default class GameScene extends Phaser.Scene {
             onComplete: () => {
                 waveText.destroy();
 
+                // Reset wave-specific bonus tracking
+                this.bonusSystem.resetWaveStats();
+
                 // If boss wave, go to shop
                 if (this.waveManager.isBossWave()) {
                     // Start the next wave first to prevent re-triggering
                     this.waveManager.startWave(currentWave + 1);
+                    this.bonusSystem.startWave(currentWave + 1);
                     this.waveTransitioning = false;
 
                     // Then launch shop
@@ -550,6 +647,7 @@ export default class GameScene extends Phaser.Scene {
                 } else {
                     // Start next wave
                     this.waveManager.startWave(currentWave + 1);
+                    this.bonusSystem.startWave(currentWave + 1);
                     this.waveTransitioning = false;
                 }
             }

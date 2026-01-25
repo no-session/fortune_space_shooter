@@ -85,6 +85,62 @@ export const COLORS = {
     BLUE: 0x0080ff
 };
 
+// Kill Streak Configuration
+export const STREAK_CONFIG = {
+    DECAY_TIME: 4000,           // 4 seconds to maintain streak
+    MULTIPLIER_PER_KILL: 0.05,  // 5% bonus per consecutive kill
+    MAX_MULTIPLIER: 3.0,        // Cap at 300%
+    MILESTONES: [5, 10, 15, 20, 25, 50]
+};
+
+// Bonus System Configuration
+export const BONUS_CONFIG = {
+    // Wave Clear Bonuses
+    WAVE_CLEAR_BASE: 500,
+    PERFECT_WAVE_MULTIPLIER: 2.0,  // No damage taken
+    FAST_CLEAR_MULTIPLIER: 1.5,    // Under 30 seconds
+
+    // Accuracy Bonuses
+    ACCURACY_THRESHOLD: 0.4,       // 40% minimum for bonus
+    ACCURACY_EXCELLENT: 0.8,       // 80%+ = excellent
+    ACCURACY_GOOD: 0.6,            // 60%+ = good
+    ACCURACY_BASE_POINTS: 500,
+
+    // Graze System
+    GRAZE_DISTANCE: 35,            // Pixels for near-miss
+    GRAZE_POINTS: 25,              // Points per graze
+    GRAZE_COOLDOWN: 100            // MS between grazes per bullet
+};
+
+// Visual Effect Configuration
+export const EFFECT_CONFIG = {
+    // Depths
+    DEPTH_PARTICLES: 100,
+    DEPTH_SCORE_POPUP: 150,
+    DEPTH_STREAK_ANNOUNCEMENT: 200,
+    DEPTH_BONUS_OVERLAY: 250,
+
+    // Screen Shake Intensities
+    SHAKE_SMALL: { duration: 100, intensity: 0.005 },
+    SHAKE_MEDIUM: { duration: 200, intensity: 0.01 },
+    SHAKE_LARGE: { duration: 300, intensity: 0.015 },
+    SHAKE_BOSS: { duration: 500, intensity: 0.025 },
+
+    // Popup Sizes
+    POPUP_SMALL: '16px',
+    POPUP_MEDIUM: '22px',
+    POPUP_LARGE: '28px',
+    POPUP_HUGE: '36px',
+
+    // Colors
+    COLOR_KILL: '#00ffff',
+    COLOR_COLLECTIBLE: '#ffffff',
+    COLOR_BONUS: '#ffd700',
+    COLOR_STREAK: '#ff00ff',
+    COLOR_GRAZE: '#00ffff',
+    COLOR_PERFECT: '#00ff00'
+};
+
 // Boss Types
 export const BOSS_TYPES = {
     MOTHERSHIP: 'mothership',

@@ -172,6 +172,12 @@ export default class BootScene extends Phaser.Scene {
         this.load.image('boss-battlecruiser', `${bossPath}/boss_battlecruiser.png`);
         this.load.image('boss-destroyer', `${bossPath}/boss_destroyer.png`);
         this.load.image('boss-overlord', `${bossPath}/boss_overlord.png`);
+
+        // Collectible sprites
+        this.load.image('collectible-coin', `${bossPath}/collectible_coin.png`);
+        this.load.image('collectible-crystal', `${bossPath}/collectible_crystal.png`);
+        this.load.image('collectible-star', `${bossPath}/collectible_star.png`);
+        this.load.image('collectible-fortune', `${bossPath}/collectible_fortune.png`);
     }
 
     create() {
@@ -265,49 +271,49 @@ export default class BootScene extends Phaser.Scene {
     }
 
     createCollectibleGraphics() {
-        // Coin (gold circle)
-        const coinGraphics = this.add.graphics();
-        coinGraphics.fillStyle(0xffd700);
-        coinGraphics.fillCircle(16, 16, 14);
-        coinGraphics.fillStyle(0xffec8b);
-        coinGraphics.fillCircle(16, 16, 10);
-        coinGraphics.fillStyle(0xffd700);
-        coinGraphics.fillCircle(14, 14, 6);
-        coinGraphics.generateTexture('collectible-coin', 32, 32);
-        coinGraphics.destroy();
+        // Only create fallback graphics if PNG assets failed to load
+        // Coin fallback
+        if (!this.textures.exists('collectible-coin')) {
+            const coinGraphics = this.add.graphics();
+            coinGraphics.fillStyle(0xffd700);
+            coinGraphics.fillCircle(16, 16, 14);
+            coinGraphics.fillStyle(0xffec8b);
+            coinGraphics.fillCircle(16, 16, 10);
+            coinGraphics.generateTexture('collectible-coin', 32, 32);
+            coinGraphics.destroy();
+        }
 
-        // Crystal (blue diamond)
-        const crystalGraphics = this.add.graphics();
-        crystalGraphics.fillStyle(0x00bfff);
-        crystalGraphics.fillTriangle(16, 2, 28, 16, 16, 30);
-        crystalGraphics.fillTriangle(16, 2, 4, 16, 16, 30);
-        crystalGraphics.fillStyle(0x87ceeb);
-        crystalGraphics.fillTriangle(16, 6, 22, 16, 16, 26);
-        crystalGraphics.generateTexture('collectible-crystal', 32, 32);
-        crystalGraphics.destroy();
+        // Crystal fallback
+        if (!this.textures.exists('collectible-crystal')) {
+            const crystalGraphics = this.add.graphics();
+            crystalGraphics.fillStyle(0x00bfff);
+            crystalGraphics.fillTriangle(16, 2, 28, 16, 16, 30);
+            crystalGraphics.fillTriangle(16, 2, 4, 16, 16, 30);
+            crystalGraphics.generateTexture('collectible-crystal', 32, 32);
+            crystalGraphics.destroy();
+        }
 
-        // Star (yellow star shape)
-        const starGraphics = this.add.graphics();
-        starGraphics.fillStyle(0xffff00);
-        // Draw star shape
-        starGraphics.fillCircle(16, 16, 12);
-        starGraphics.fillStyle(0xffffff);
-        starGraphics.fillCircle(16, 16, 6);
-        starGraphics.generateTexture('collectible-star', 32, 32);
-        starGraphics.destroy();
+        // Star fallback
+        if (!this.textures.exists('collectible-star')) {
+            const starGraphics = this.add.graphics();
+            starGraphics.fillStyle(0xffff00);
+            starGraphics.fillCircle(16, 16, 12);
+            starGraphics.fillStyle(0xffffff);
+            starGraphics.fillCircle(16, 16, 6);
+            starGraphics.generateTexture('collectible-star', 32, 32);
+            starGraphics.destroy();
+        }
 
-        // Fortune Coin (special gold with sparkle)
-        const fortuneGraphics = this.add.graphics();
-        fortuneGraphics.fillStyle(0xffd700);
-        fortuneGraphics.fillCircle(18, 18, 16);
-        fortuneGraphics.fillStyle(0xffec8b);
-        fortuneGraphics.fillCircle(18, 18, 12);
-        fortuneGraphics.fillStyle(0xff6600);
-        fortuneGraphics.fillCircle(18, 18, 8);
-        fortuneGraphics.fillStyle(0xffffff);
-        fortuneGraphics.fillCircle(12, 12, 4);
-        fortuneGraphics.generateTexture('collectible-fortune', 36, 36);
-        fortuneGraphics.destroy();
+        // Fortune Coin fallback
+        if (!this.textures.exists('collectible-fortune')) {
+            const fortuneGraphics = this.add.graphics();
+            fortuneGraphics.fillStyle(0xffd700);
+            fortuneGraphics.fillCircle(18, 18, 16);
+            fortuneGraphics.fillStyle(0x9400d3);
+            fortuneGraphics.fillCircle(18, 18, 10);
+            fortuneGraphics.generateTexture('collectible-fortune', 36, 36);
+            fortuneGraphics.destroy();
+        }
     }
 
     createPlaceholderGraphics() {

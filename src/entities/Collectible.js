@@ -38,8 +38,8 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
         this.magnetRange = 80; // pixels
         this.magnetStrength = 400; // speed when attracted
         
-        // Visual effects
-        this.setScale(0.8);
+        // Visual effects - scale 0.5 for 64x64 assets to appear as ~32x32
+        this.setScale(0.5);
         this.setDepth(70);
         
         // Rotation animation
@@ -55,17 +55,12 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
         if (type === COLLECTIBLE_TYPES.STAR || type === COLLECTIBLE_TYPES.FORTUNE_COIN) {
             const pulseTween = scene.tweens.add({
                 targets: this,
-                scale: 1.0,
+                scale: 0.65,
                 duration: 400,
                 yoyo: true,
                 repeat: -1
             });
             this.tweens.push(pulseTween);
-            
-            // Add glow effect for fortune coins
-            if (type === COLLECTIBLE_TYPES.FORTUNE_COIN) {
-                this.setTint(0xffd700);
-            }
         }
     }
 
@@ -131,11 +126,16 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
             scene.soundManager.playCollect();
         }
 
-        // Show score popup
-        this.showScorePopup(scene, x, y, value, type);
-
-        // Create collection effect with particles
-        this.createParticleEffect(scene, x, y, type);
+        // Use EffectManager if available, otherwise fallback to local methods
+        if (scene.effectManager) {
+            const color = type === COLLECTIBLE_TYPES.FORTUNE_COIN ? '#ffd700' : '#ffffff';
+            scene.effectManager.showScorePopup(x, y, value, { color, prefix: '+' });
+            scene.effectManager.createCollectEffect(x, y, type);
+        } else {
+            // Fallback
+            this.showScorePopup(scene, x, y, value, type);
+            this.createParticleEffect(scene, x, y, type);
+        }
 
         // Destroy the collectible
         this.destroy();
