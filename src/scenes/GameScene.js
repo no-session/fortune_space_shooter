@@ -403,6 +403,20 @@ export default class GameScene extends Phaser.Scene {
                 bullet.destroy();
             }
         }
+
+        // Clean up off-screen boss bullets (critical fix: boss bullets weren't being cleaned up)
+        this.bosses.children.entries.forEach(boss => {
+            if (boss && boss.bullets) {
+                const bossBulletsList = boss.bullets.children.entries.slice();
+                for (let i = bossBulletsList.length - 1; i >= 0; i--) {
+                    const bullet = bossBulletsList[i];
+                    if (bullet && (bullet.y > this.scale.height + 50 || bullet.y < -50 ||
+                                  bullet.x < -50 || bullet.x > this.scale.width + 50)) {
+                        bullet.destroy();
+                    }
+                }
+            }
+        });
     }
 
     onEnemyKilled(enemy) {
@@ -486,6 +500,13 @@ export default class GameScene extends Phaser.Scene {
         if (this.enemyBullets) {
             this.enemyBullets.clear(true, true);
         }
+
+        // Clear all boss bullets between waves
+        this.bosses.children.entries.forEach(boss => {
+            if (boss && boss.bullets) {
+                boss.bullets.clear(true, true);
+            }
+        });
 
         const currentWave = this.waveManager.getCurrentWave();
         

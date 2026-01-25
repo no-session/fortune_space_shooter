@@ -120,6 +120,11 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
         const phaseConfig = this.config.phases[this.currentPhase];
         if (!phaseConfig || !phaseConfig.attacks) return;
 
+        // Limit maximum concurrent bullets to prevent screen flooding
+        if (this.bullets.children.entries.length > 100) {
+            return;
+        }
+
         // Execute each attack in the phase
         phaseConfig.attacks.forEach(attack => {
             this.executeAttack(attack);

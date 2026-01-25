@@ -26,8 +26,9 @@ export default class WaveManager {
 
     startNormalWave() {
         const formationManager = this.scene.formationManager;
-        const enemyCount = Math.min(5 + this.currentWave * 2, 20);
-        const formationCount = Math.min(2 + Math.floor(this.currentWave / 3), 5);
+        // Reduced caps to prevent overwhelming spawns at higher waves
+        const enemyCount = Math.min(5 + this.currentWave * 2, 15);
+        const formationCount = Math.min(2 + Math.floor(this.currentWave / 3), 3);
         
         this.enemiesRemaining = enemyCount * formationCount;
         
