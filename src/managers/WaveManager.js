@@ -1,4 +1,4 @@
-import { FORMATION_TYPES, ENEMY_TYPES } from '../utils/constants.js';
+import { FORMATION_TYPES, ENEMY_TYPES, BOSS_WAVE_SEQUENCE } from '../utils/constants.js';
 
 export default class WaveManager {
     constructor(scene) {
@@ -81,10 +81,17 @@ export default class WaveManager {
         this.enemiesRemaining = 1; // Boss counts as 1
         const bossX = this.scene.scale.width / 2;
         const bossY = -100;
-        
+
+        // Calculate which boss to spawn based on wave number
+        // Wave 5 -> index 0, Wave 10 -> index 1, etc., cycles every 5 boss waves
+        const bossIndex = Math.floor((this.currentWave / 5) - 1) % BOSS_WAVE_SEQUENCE.length;
+        const bossType = BOSS_WAVE_SEQUENCE[bossIndex];
+
+        console.log(`Spawning boss: ${bossType} (wave ${this.currentWave}, index ${bossIndex})`);
+
         this.scene.time.delayedCall(500, () => {
             if (this.scene.spawnBoss) {
-                this.scene.spawnBoss('mothership', bossX, bossY);
+                this.scene.spawnBoss(bossType, bossX, bossY);
             }
         });
     }

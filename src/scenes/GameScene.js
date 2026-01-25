@@ -535,13 +535,13 @@ export default class GameScene extends Phaser.Scene {
         });
     }
 
-    onBossDefeated() {
+    onBossDefeated(scoreValue = 5000) {
         this.waveManager.onBossKilled();
-        this.scoreManager.addScore(5000); // Big bonus for boss
-        
+        this.scoreManager.addScore(scoreValue); // Boss-specific score bonus
+
         // Big explosion effect
         this.createBossExplosion();
-        
+
         // Screen shake
         this.cameras.main.shake(800, 0.02);
     }
