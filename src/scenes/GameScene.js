@@ -19,7 +19,8 @@ import BonusSystem from '../systems/BonusSystem.js';
 import DailyChallenge from '../managers/DailyChallenge.js';
 import TouchControls from '../ui/TouchControls.js';
 import ScreenWipe from '../effects/ScreenWipe.js';
-import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS, WEAPON_TYPES, WEAPON_CONFIG, HAZARD_TYPES, HAZARD_CONFIG, DRONE_CONFIG } from '../utils/constants.js';
+import Pet from '../entities/Pet.js';
+import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS, WEAPON_TYPES, WEAPON_CONFIG, HAZARD_TYPES, HAZARD_CONFIG, DRONE_CONFIG, PET_TYPES, PET_CONFIG, ACHIEVEMENT_REWARDS, WEATHER_TYPES, WEATHER_CONFIG } from '../utils/constants.js';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -147,6 +148,44 @@ export default class GameScene extends Phaser.Scene {
         // High score tracking for real-time celebration
         this.personalBest = this.getPersonalBest();
         this.highScoreBeaten = false;
+
+        // --- PET SYSTEM ---
+        this.pet = null;
+        const selectedPet = localStorage.getItem('fortune-selected-pet');
+        if (selectedPet && PET_CONFIG[selectedPet]) {
+            this.pet = new Pet(this, this.player, selectedPet);
+            // Apply pet passive abilities
+            if (this.pet.getScoreBonus() > 0) {
+                this.scoreManager.petScoreBonus = this.pet.getScoreBonus();
+            }
+            if (this.pet.getMagnetRangeBonus() > 0) {
+                this.player.baseMagnetRange += this.pet.getMagnetRangeBonus();
+            }
+        }
+
+        // --- ACHIEVEMENT REWARDS ---
+        this.applyAchievementRewards();
+
+        // --- AUTO-DIFFICULTY ADJUSTMENT (hidden) ---
+        this.deathsThisWave = 0;
+        this.autoDifficultyActive = false;
+        this.autoDifficultyEnemySpeedMod = 1;
+        this.autoDifficultyDropMod = 1;
+        this.perfectWaveStreak = 0;
+        this.nextWaveSpeedBoost = 1;
+
+        // --- WEATHER SYSTEM ---
+        this.currentWeather = WEATHER_TYPES.NORMAL;
+        this.weatherParticles = [];
+        this.weatherGraphics = this.add.graphics();
+        this.weatherGraphics.setDepth(2);
+        this.weatherOverlay = null;
+
+        // --- DANGER ZONE ---
+        this.dangerZoneGraphics = this.add.graphics();
+        this.dangerZoneGraphics.setDepth(997);
+        this.dangerZoneText = null;
+        this.dangerFrameCounter = 0;
 
         // Magnet beam graphics
         this.magnetGraphics = this.add.graphics();
@@ -363,7 +402,9 @@ export default class GameScene extends Phaser.Scene {
                     bullet.destroy();
                     this.bonusSystem.recordShotHit();
                     const isCrit = Math.random() < 0.1;
-                    const damage = isCrit ? 20 : 10;
+                    let damage = isCrit ? 20 : 10;
+                    if (this.pet) damage += this.pet.getExtraDamage();
+                    if (this.achievementDamageBonus) damage = Math.floor(damage * (1 + this.achievementDamageBonus));
                     enemy.takeDamage(damage);
                     this.showDamageNumber(enemy.x, enemy.y, damage, isCrit);
                 }
@@ -379,7 +420,9 @@ export default class GameScene extends Phaser.Scene {
                     bullet.destroy();
                     this.bonusSystem.recordShotHit();
                     const isCrit = Math.random() < 0.1;
-                    const damage = isCrit ? 20 : 10;
+                    let damage = isCrit ? 20 : 10;
+                    if (this.pet) damage += this.pet.getExtraDamage();
+                    if (this.achievementDamageBonus) damage = Math.floor(damage * (1 + this.achievementDamageBonus));
                     boss.takeDamage(damage);
                     this.showDamageNumber(boss.x, boss.y, damage, isCrit);
                 }
@@ -392,9 +435,20 @@ export default class GameScene extends Phaser.Scene {
             this.player,
             (bullet, player) => {
                 if (bullet.active && player.active && !this.player.invincible && !this.player.isDying) {
+                    // Ghost pet dodge check
+                    if (this.pet && this.pet.shouldDodge()) {
+                        bullet.destroy();
+                        this.effectManager.showScorePopup(
+                            this.player.x, this.player.y - 30,
+                            'DODGED!', { color: '#ffffff', size: '16px', prefix: '' }
+                        );
+                        return;
+                    }
                     bullet.destroy();
+                    const bulletSpeed = bullet.body ? Math.abs(bullet.body.velocity.y) : 400;
                     this.player.takeDamage(10);
                     this.waveDamageTaken = true;
+                    if (this.player.isDying) this.onPlayerDeath();
                     if (!this.player.isAlive()) {
                         this.triggerGameOver();
                     }
@@ -411,6 +465,7 @@ export default class GameScene extends Phaser.Scene {
                     enemy.die();
                     this.player.takeDamage(20);
                     this.waveDamageTaken = true;
+                    if (this.player.isDying) this.onPlayerDeath();
                     if (!this.player.isAlive()) {
                         this.triggerGameOver();
                     }
@@ -455,7 +510,10 @@ export default class GameScene extends Phaser.Scene {
                 // Add score
                 const value = collectible.value || 10;
                 const type = collectible.type || 'coin';
-                this.scoreManager.addCollectible(value, this.game.getTime(), type);
+                const collectResult = this.scoreManager.addCollectible(value, this.game.getTime(), type);
+                if (collectResult && collectResult.chain) {
+                    this.handleCollectibleChain(collectResult.chain);
+                }
                 if (this.achievementManager) this.achievementManager.onCollectibleCollected();
                 if (this.bonusStageActive) this.bonusStageCollected++;
                 if (type === COLLECTIBLE_TYPES.COIN || type === COLLECTIBLE_TYPES.FORTUNE_COIN) this.dailyChallengeCoins++;
@@ -983,9 +1041,19 @@ export default class GameScene extends Phaser.Scene {
                         this.player,
                         (bullet, player) => {
                             if (bullet.active && player.active && !this.player.invincible && !this.player.isDying) {
+                                // Ghost pet dodge check
+                                if (this.pet && this.pet.shouldDodge()) {
+                                    bullet.destroy();
+                                    this.effectManager.showScorePopup(
+                                        this.player.x, this.player.y - 30,
+                                        'DODGED!', { color: '#ffffff', size: '16px', prefix: '' }
+                                    );
+                                    return;
+                                }
                                 bullet.destroy();
                                 this.player.takeDamage(15);
                                 this.waveDamageTaken = true;
+                                if (this.player.isDying) this.onPlayerDeath();
                                 if (!this.player.isAlive()) {
                                     this.triggerGameOver();
                                 }
@@ -1020,7 +1088,10 @@ export default class GameScene extends Phaser.Scene {
                         }
                         const value = collectible.value || 10;
                         const type = collectible.type || 'coin';
-                        this.scoreManager.addCollectible(value, this.game.getTime(), type);
+                        const manualResult = this.scoreManager.addCollectible(value, this.game.getTime(), type);
+                        if (manualResult && manualResult.chain) {
+                            this.handleCollectibleChain(manualResult.chain);
+                        }
                         if (this.achievementManager) this.achievementManager.onCollectibleCollected();
                         if (this.bonusStageActive) this.bonusStageCollected++;
                         if (type === COLLECTIBLE_TYPES.COIN || type === COLLECTIBLE_TYPES.FORTUNE_COIN) this.dailyChallengeCoins++;
@@ -1143,6 +1214,15 @@ export default class GameScene extends Phaser.Scene {
 
         // --- HIGH SCORE REAL-TIME CHECK ---
         this.checkHighScoreLive();
+
+        // --- UPDATE PET ---
+        this.updatePet(time);
+
+        // --- UPDATE WEATHER ---
+        this.updateWeather();
+
+        // --- UPDATE DANGER ZONE ---
+        this.updateDangerZone();
 
         // --- UPDATE RADAR ---
         this.updateRadar();
@@ -1369,7 +1449,7 @@ export default class GameScene extends Phaser.Scene {
         }
 
         // Drop power-up (difficulty-adjusted chance, separate from collectibles)
-        const adjustedDropChance = POWERUP_DROP_CHANCE * (this.difficulty ? this.difficulty.powerUpDropMultiplier : 1);
+        const adjustedDropChance = POWERUP_DROP_CHANCE * (this.difficulty ? this.difficulty.powerUpDropMultiplier : 1) * this.autoDifficultyDropMod;
         if (Math.random() < adjustedDropChance) {
             this.dropPowerUp(enemy.x, enemy.y);
         }
@@ -1451,7 +1531,11 @@ export default class GameScene extends Phaser.Scene {
             this.scoreManager.addBonusScore(1000, 'waveClear');
             this.showWaveSurvivalBonus();
             if (this.achievementManager) this.achievementManager.onWaveCompletedNoDamage();
+            this.onPerfectWave();
         }
+
+        // Reset auto-difficulty for the completed wave
+        this.resetAutoDifficulty();
 
         // Award bonuses to score
         if (bonusData.waveClearPoints > 0) {
@@ -1529,6 +1613,10 @@ export default class GameScene extends Phaser.Scene {
                             this._pendingBonusStage = true;
                         }
                     } else {
+                        // Pick weather for new wave
+                        const weather = this.pickWeather();
+                        this.startWeather(weather);
+
                         // Show countdown then start wave
                         this.showWaveCountdown(() => {
                             this.waveManager.startWave(nextWaveNum);
@@ -2193,6 +2281,29 @@ export default class GameScene extends Phaser.Scene {
             this.drone = null;
         }
 
+        // Clean up pet
+        if (this.pet) {
+            this.pet.destroy();
+            this.pet = null;
+        }
+
+        // Clean up weather
+        this.clearWeather();
+        if (this.weatherGraphics) {
+            this.weatherGraphics.destroy();
+            this.weatherGraphics = null;
+        }
+
+        // Clean up danger zone
+        if (this.dangerZoneGraphics) {
+            this.dangerZoneGraphics.destroy();
+            this.dangerZoneGraphics = null;
+        }
+        if (this.dangerZoneText) {
+            this.dangerZoneText.destroy();
+            this.dangerZoneText = null;
+        }
+
         // Clean up edge warnings
         this.edgeWarnings.forEach(a => { if (a) a.destroy(); });
         this.edgeWarnings = [];
@@ -2535,6 +2646,349 @@ export default class GameScene extends Phaser.Scene {
             }
         }
         return positions;
+    }
+
+    // --- ACHIEVEMENT REWARDS ---
+    applyAchievementRewards() {
+        const rewards = JSON.parse(localStorage.getItem('fortune-achievement-rewards') || '{}');
+
+        // wave_10: +500 starting bonus points
+        if (rewards.wave_10) {
+            this.scoreManager.addBonusScore(500, 'waveClear');
+            this.effectManager.showScorePopup(
+                this.scale.width / 2, this.scale.height / 2 + 50,
+                '+500 BONUS', { color: '#ffd700', size: '18px', prefix: '' }
+            );
+        }
+
+        // combo_20: +1 second combo window
+        if (rewards.combo_20) {
+            this.scoreManager.comboTimeout += 1000;
+        }
+
+        // first_blood pet unlock handled by pet selection in menu
+        // boss_slayer damage bonus applied in collision handlers via this.achievementDamageBonus
+        this.achievementDamageBonus = rewards.boss_slayer ? 0.05 : 0;
+    }
+
+    // --- PET UPDATE ---
+    updatePet(time) {
+        if (this.pet) {
+            this.pet.update(time);
+        }
+    }
+
+    // --- WEATHER SYSTEM ---
+    pickWeather() {
+        const rand = Math.random();
+        let cumulative = 0;
+        for (const [type, config] of Object.entries(WEATHER_CONFIG)) {
+            cumulative += config.chance;
+            if (rand < cumulative) {
+                return type;
+            }
+        }
+        return WEATHER_TYPES.NORMAL;
+    }
+
+    startWeather(weather) {
+        // Clean old weather
+        this.clearWeather();
+        this.currentWeather = weather;
+
+        if (weather === WEATHER_TYPES.NORMAL) return;
+
+        const config = WEATHER_CONFIG[weather];
+
+        // Show weather name
+        const weatherText = this.add.text(this.scale.width / 2, this.scale.height / 2 + 80, config.name + ' approaching...', {
+            fontSize: '18px',
+            fontFamily: 'monospace',
+            color: '#' + config.color.toString(16).padStart(6, '0'),
+            stroke: '#000000',
+            strokeThickness: 3,
+            fontStyle: 'italic'
+        });
+        weatherText.setOrigin(0.5);
+        weatherText.setDepth(1005);
+        weatherText.setAlpha(0);
+
+        this.tweens.add({
+            targets: weatherText,
+            alpha: 1,
+            duration: 500,
+            onComplete: () => {
+                this.time.delayedCall(2000, () => {
+                    this.tweens.add({
+                        targets: weatherText,
+                        alpha: 0,
+                        duration: 500,
+                        onComplete: () => weatherText.destroy()
+                    });
+                });
+            }
+        });
+
+        // Create overlay for nebula storm
+        if (weather === WEATHER_TYPES.NEBULA_STORM) {
+            this.weatherOverlay = this.add.rectangle(
+                this.scale.width / 2, this.scale.height / 2,
+                this.scale.width, this.scale.height,
+                0x440066, 0.08
+            );
+            this.weatherOverlay.setDepth(2);
+        }
+    }
+
+    clearWeather() {
+        this.weatherParticles.forEach(p => { if (p) p.destroy(); });
+        this.weatherParticles = [];
+        if (this.weatherOverlay) {
+            this.weatherOverlay.destroy();
+            this.weatherOverlay = null;
+        }
+        if (this.weatherGraphics) this.weatherGraphics.clear();
+    }
+
+    updateWeather() {
+        if (this.currentWeather === WEATHER_TYPES.NORMAL) return;
+
+        const delta = this.game.loop.delta / 1000;
+        const config = WEATHER_CONFIG[this.currentWeather];
+
+        if (this.currentWeather === WEATHER_TYPES.SPACE_RAIN) {
+            // Spawn rain-like particles (thin blue lines)
+            if (this.weatherParticles.length < (config.particleCount || 25)) {
+                const x = Phaser.Math.Between(0, this.scale.width);
+                const line = this.add.rectangle(x, -10, 1, Phaser.Math.Between(8, 20), config.color, 0.4);
+                line.setDepth(2);
+                line.setRotation(-0.3);
+                line._speed = Phaser.Math.Between(300, 500);
+                this.weatherParticles.push(line);
+            }
+            // Move particles
+            for (let i = this.weatherParticles.length - 1; i >= 0; i--) {
+                const p = this.weatherParticles[i];
+                p.y += p._speed * delta;
+                p.x -= 40 * delta;
+                if (p.y > this.scale.height + 20) {
+                    p.y = -10;
+                    p.x = Phaser.Math.Between(0, this.scale.width);
+                }
+            }
+        } else if (this.currentWeather === WEATHER_TYPES.SOLAR_FLARE) {
+            // Occasional bright flash
+            if (Math.random() < 0.003) {
+                const flash = this.add.rectangle(
+                    this.scale.width / 2, this.scale.height / 2,
+                    this.scale.width, this.scale.height, 0xffaa00, 0.06
+                );
+                flash.setDepth(2);
+                this.tweens.add({
+                    targets: flash,
+                    alpha: 0,
+                    duration: 300,
+                    onComplete: () => flash.destroy()
+                });
+            }
+        } else if (this.currentWeather === WEATHER_TYPES.NEBULA_STORM) {
+            // Swirling purple particles
+            if (this.weatherParticles.length < (config.particleCount || 20)) {
+                const x = Phaser.Math.Between(0, this.scale.width);
+                const y = Phaser.Math.Between(0, this.scale.height);
+                const particle = this.add.circle(x, y, Phaser.Math.Between(3, 8), config.color, 0.15);
+                particle.setDepth(2);
+                particle._angle = Math.random() * Math.PI * 2;
+                particle._speed = Phaser.Math.Between(20, 50);
+                particle._radius = Phaser.Math.Between(30, 80);
+                particle._cx = x;
+                particle._cy = y;
+                this.weatherParticles.push(particle);
+            }
+            for (const p of this.weatherParticles) {
+                p._angle += 0.02;
+                p.x = p._cx + Math.cos(p._angle) * p._radius * 0.3;
+                p.y += 15 * delta;
+                if (p.y > this.scale.height + 20) {
+                    p.y = -10;
+                    p._cx = Phaser.Math.Between(0, this.scale.width);
+                }
+            }
+
+            // Pulse overlay
+            if (this.weatherOverlay) {
+                const pulse = 0.05 + 0.03 * Math.sin(this.time.now * 0.002);
+                this.weatherOverlay.setAlpha(pulse);
+            }
+        }
+    }
+
+    // --- DANGER ZONE INDICATOR ---
+    updateDangerZone() {
+        this.dangerFrameCounter++;
+        if (this.dangerFrameCounter % 30 !== 0) return;
+
+        if (!this.dangerZoneGraphics) return;
+        this.dangerZoneGraphics.clear();
+
+        if (!this.player || !this.player.active) return;
+
+        const dangerThreshold = this.scale.height * 0.85;
+        if (this.player.y < dangerThreshold) {
+            if (this.dangerZoneText) {
+                this.dangerZoneText.setAlpha(0);
+            }
+            return;
+        }
+
+        // Check for approaching enemy bullets
+        let bulletApproaching = false;
+        this.enemyBullets.children.entries.forEach(bullet => {
+            if (!bullet || !bullet.active) return;
+            if (bullet.y > this.player.y - 150 && bullet.y < this.player.y &&
+                Math.abs(bullet.x - this.player.x) < 120) {
+                bulletApproaching = true;
+            }
+        });
+
+        // Also check boss bullets
+        if (!bulletApproaching) {
+            this.bosses.children.entries.forEach(boss => {
+                if (boss && boss.bullets) {
+                    boss.bullets.children.entries.forEach(bullet => {
+                        if (!bullet || !bullet.active) return;
+                        if (bullet.y > this.player.y - 150 && bullet.y < this.player.y &&
+                            Math.abs(bullet.x - this.player.x) < 120) {
+                            bulletApproaching = true;
+                        }
+                    });
+                }
+            });
+        }
+
+        if (bulletApproaching) {
+            // Pulse red at bottom edge
+            const pulse = 0.15 + 0.1 * Math.sin(this.time.now * 0.01);
+            this.dangerZoneGraphics.fillStyle(0xff0000, pulse);
+            this.dangerZoneGraphics.fillRect(0, this.scale.height - 8, this.scale.width, 8);
+
+            // Show DANGER text near player
+            if (!this.dangerZoneText) {
+                this.dangerZoneText = this.add.text(0, 0, 'DANGER!', {
+                    fontSize: '14px',
+                    fontFamily: 'monospace',
+                    color: '#ff4444',
+                    stroke: '#000000',
+                    strokeThickness: 2,
+                    fontStyle: 'bold'
+                });
+                this.dangerZoneText.setOrigin(0.5);
+                this.dangerZoneText.setDepth(998);
+            }
+            this.dangerZoneText.setPosition(this.player.x, this.player.y - 35);
+            this.dangerZoneText.setAlpha(0.6 + 0.4 * Math.sin(this.time.now * 0.01));
+        } else {
+            if (this.dangerZoneText) {
+                this.dangerZoneText.setAlpha(0);
+            }
+        }
+    }
+
+    // --- AUTO-DIFFICULTY ADJUSTMENT (hidden) ---
+    onPlayerDeath() {
+        this.deathsThisWave++;
+        if (this.deathsThisWave >= 3 && !this.autoDifficultyActive) {
+            this.autoDifficultyActive = true;
+            this.autoDifficultyEnemySpeedMod = 0.85; // 15% slower bullets
+            this.autoDifficultyDropMod = 1.2; // 20% more drops
+
+            // Encouraging message
+            this.effectManager.showScorePopup(
+                this.scale.width / 2, this.scale.height / 2,
+                'You got this! Keep going!',
+                { color: '#00ff88', size: '22px', prefix: '' }
+            );
+        }
+    }
+
+    resetAutoDifficulty() {
+        this.deathsThisWave = 0;
+        if (this.autoDifficultyActive) {
+            this.autoDifficultyActive = false;
+            this.autoDifficultyEnemySpeedMod = 1;
+            this.autoDifficultyDropMod = 1;
+        }
+    }
+
+    onPerfectWave() {
+        this.perfectWaveStreak++;
+        if (this.perfectWaveStreak >= 1) {
+            this.nextWaveSpeedBoost = 1.1; // 10% faster enemies next wave
+        }
+    }
+
+    // --- COLLECTIBLE CHAIN HANDLING ---
+    handleCollectibleChain(chainResult) {
+        if (!chainResult) return;
+
+        const typeNames = {
+            coin: 'COIN',
+            crystal: 'CRYSTAL',
+            star: 'STAR',
+            fortune_coin: 'FORTUNE'
+        };
+        const typeName = typeNames[chainResult.type] || chainResult.type.toUpperCase();
+
+        if (chainResult.count === 2 && !chainResult.bonus) {
+            // Show chain progress
+            this.effectManager.showScorePopup(
+                this.player.x, this.player.y - 50,
+                `${typeName} x2...`,
+                { color: '#ffaa00', size: '16px', prefix: '' }
+            );
+        } else if (chainResult.count === 3 && chainResult.bonus) {
+            // Show chain completion
+            this.effectManager.showScorePopup(
+                this.player.x, this.player.y - 50,
+                `${typeName} x3 -> BONUS!`,
+                { color: '#ff00ff', size: '22px', prefix: '' }
+            );
+
+            // Spawn bonus collectible
+            this.spawnChainBonus(chainResult.type);
+        }
+    }
+
+    spawnChainBonus(type) {
+        let bonusType;
+        switch (type) {
+            case COLLECTIBLE_TYPES.COIN:
+                bonusType = COLLECTIBLE_TYPES.CRYSTAL;
+                break;
+            case COLLECTIBLE_TYPES.CRYSTAL:
+                bonusType = COLLECTIBLE_TYPES.STAR;
+                break;
+            case COLLECTIBLE_TYPES.STAR:
+                bonusType = COLLECTIBLE_TYPES.FORTUNE_COIN;
+                break;
+            case COLLECTIBLE_TYPES.FORTUNE_COIN:
+                // Extra life + gold flash
+                if (this.player) {
+                    this.player.lives++;
+                    this.effectManager.screenFlash(0xffd700, 300);
+                    this.effectManager.showScorePopup(
+                        this.player.x, this.player.y - 60,
+                        'EXTRA LIFE!',
+                        { color: '#ffd700', size: '28px', prefix: '' }
+                    );
+                }
+                return;
+            default:
+                bonusType = COLLECTIBLE_TYPES.CRYSTAL;
+        }
+
+        const c = new Collectible(this, this.player.x, this.player.y - 60, bonusType);
+        this.collectibles.add(c);
     }
 
     _launchGameOver() {

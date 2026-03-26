@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import ChatBox from '../ui/ChatBox.js';
 import DailyChallenge from '../managers/DailyChallenge.js';
 import XPManager from '../managers/XPManager.js';
-import { SHIP_SKINS, DIFFICULTY_MODES } from '../utils/constants.js';
+import { SHIP_SKINS, DIFFICULTY_MODES, PET_TYPES, PET_CONFIG } from '../utils/constants.js';
 
 export default class MenuScene extends Phaser.Scene {
     constructor() {
@@ -451,11 +451,20 @@ export default class MenuScene extends Phaser.Scene {
 
         // Achievements button
         this.createRetroButton(
-            width / 2,
+            width / 2 - 120,
             buttonY + 115,
             'ACHIEVEMENTS',
             0xffa500,
             () => this.showAchievements()
+        );
+
+        // Pets button
+        this.createRetroButton(
+            width / 2 + 120,
+            buttonY + 115,
+            'PETS',
+            0xff88ff,
+            () => this.showPetsOverlay()
         );
 
         // Blinking "INSERT COIN" text
@@ -1476,6 +1485,228 @@ export default class MenuScene extends Phaser.Scene {
             yesBtn.destroy();
             noBtn.destroy();
             this.scene.start('GameScene');
+        });
+    }
+
+    showPetsOverlay() {
+        const width = this.scale.width;
+        const height = this.scale.height;
+        const elements = [];
+
+        const xpManager = new XPManager();
+        const playerLevel = xpManager.getLevel();
+        const selectedPet = localStorage.getItem('fortune-selected-pet') || '';
+        const achievementRewards = JSON.parse(localStorage.getItem('fortune-achievement-rewards') || '{}');
+
+        // Dark overlay
+        const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.85);
+        overlay.setDepth(2000);
+        elements.push(overlay);
+
+        // Panel
+        const panel = this.add.rectangle(width / 2, height / 2, 520, 400, 0x0a0a1a);
+        panel.setDepth(2001);
+        panel.setStrokeStyle(3, 0xff88ff);
+        elements.push(panel);
+
+        // Title
+        const title = this.add.text(width / 2, height / 2 - 170, 'SPACE PETS', {
+            fontSize: '28px',
+            fontFamily: 'monospace',
+            color: '#ff88ff',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        title.setOrigin(0.5);
+        title.setDepth(2002);
+        elements.push(title);
+
+        const subtitle = this.add.text(width / 2, height / 2 - 145, 'Choose a companion to help you fight!', {
+            fontSize: '12px',
+            fontFamily: 'monospace',
+            color: '#888888'
+        });
+        subtitle.setOrigin(0.5);
+        subtitle.setDepth(2002);
+        elements.push(subtitle);
+
+        // Pet cards
+        const petIds = Object.keys(PET_CONFIG);
+        const startX = width / 2 - 190;
+        const petY = height / 2 - 40;
+
+        petIds.forEach((id, i) => {
+            const config = PET_CONFIG[id];
+            const x = startX + i * 100;
+
+            // Check unlock: level requirement OR first_blood unlocks star_buddy
+            let isUnlocked = playerLevel >= config.unlockLevel;
+            if (id === 'star_buddy' && achievementRewards.first_blood) {
+                isUnlocked = true;
+            }
+            const isSelected = id === selectedPet;
+
+            // Card
+            const cardColor = isSelected ? 0x334455 : 0x1a1a2e;
+            const card = this.add.rectangle(x, petY, 85, 130, cardColor);
+            card.setStrokeStyle(2, isSelected ? 0xff88ff : (isUnlocked ? 0x444466 : 0x333333));
+            card.setDepth(2002);
+            elements.push(card);
+
+            if (isSelected) {
+                const glow = this.add.rectangle(x, petY, 91, 136);
+                glow.setStrokeStyle(3, 0xff88ff);
+                glow.setDepth(2001);
+                elements.push(glow);
+                this.tweens.add({
+                    targets: glow,
+                    alpha: { from: 1, to: 0.3 },
+                    duration: 800,
+                    yoyo: true,
+                    repeat: -1
+                });
+            }
+
+            // Pet preview (simple colored circle)
+            const previewColor = isUnlocked ? config.color : 0x333333;
+            const preview = this.add.circle(x, petY - 30, 15, previewColor, isUnlocked ? 0.9 : 0.3);
+            preview.setDepth(2003);
+            elements.push(preview);
+
+            // Cat ears for space cat
+            if (id === 'space_cat' && isUnlocked) {
+                const earL = this.add.triangle(x - 10, petY - 45, 0, 8, 5, 0, 10, 8, previewColor, 0.9);
+                earL.setDepth(2003);
+                elements.push(earL);
+                const earR = this.add.triangle(x + 10, petY - 45, 0, 8, 5, 0, 10, 8, previewColor, 0.9);
+                earR.setDepth(2003);
+                elements.push(earR);
+            }
+
+            if (!isUnlocked) {
+                const lock = this.add.text(x, petY - 30, '🔒', { fontSize: '16px' });
+                lock.setOrigin(0.5);
+                lock.setDepth(2004);
+                elements.push(lock);
+            }
+
+            // Name
+            const nameText = this.add.text(x, petY + 10, config.name, {
+                fontSize: '9px',
+                fontFamily: 'monospace',
+                color: isUnlocked ? '#ffffff' : '#666666',
+                align: 'center',
+                wordWrap: { width: 80 }
+            });
+            nameText.setOrigin(0.5);
+            nameText.setDepth(2003);
+            elements.push(nameText);
+
+            // Ability description
+            const descText = this.add.text(x, petY + 30, config.description, {
+                fontSize: '8px',
+                fontFamily: 'monospace',
+                color: isUnlocked ? '#88ff88' : '#555555',
+                align: 'center',
+                wordWrap: { width: 80 }
+            });
+            descText.setOrigin(0.5);
+            descText.setDepth(2003);
+            elements.push(descText);
+
+            // Unlock requirement or EQUIPPED
+            let infoStr = '';
+            if (!isUnlocked) {
+                infoStr = `Lv.${config.unlockLevel}`;
+            } else if (isSelected) {
+                infoStr = 'EQUIPPED';
+            }
+            const info = this.add.text(x, petY + 50, infoStr, {
+                fontSize: '9px',
+                fontFamily: 'monospace',
+                color: isSelected ? '#ff88ff' : '#888888'
+            });
+            info.setOrigin(0.5);
+            info.setDepth(2003);
+            elements.push(info);
+
+            // Click to select/deselect
+            if (isUnlocked) {
+                card.setInteractive({ useHandCursor: true });
+                card.on('pointerdown', () => {
+                    this.playClickSound();
+                    if (isSelected) {
+                        localStorage.removeItem('fortune-selected-pet');
+                    } else {
+                        localStorage.setItem('fortune-selected-pet', id);
+                    }
+                    elements.forEach(el => { if (el && el.destroy) el.destroy(); });
+                    this.showPetsOverlay();
+                });
+                card.on('pointerover', () => {
+                    card.setFillStyle(0x334455);
+                    this.playHoverSound();
+                });
+                card.on('pointerout', () => {
+                    card.setFillStyle(isSelected ? 0x334455 : 0x1a1a2e);
+                });
+            }
+        });
+
+        // Current level info
+        const lvlInfo = this.add.text(width / 2, height / 2 + 100, `Your Level: ${playerLevel}`, {
+            fontSize: '14px',
+            fontFamily: 'monospace',
+            color: '#888888'
+        });
+        lvlInfo.setOrigin(0.5);
+        lvlInfo.setDepth(2002);
+        elements.push(lvlInfo);
+
+        // None option
+        const noneBtn = this.add.rectangle(width / 2, height / 2 + 130, 100, 30, selectedPet ? 0x1a1a2e : 0x334455);
+        noneBtn.setStrokeStyle(1, 0x888888);
+        noneBtn.setInteractive({ useHandCursor: true });
+        noneBtn.setDepth(2002);
+        elements.push(noneBtn);
+
+        const noneText = this.add.text(width / 2, height / 2 + 130, 'NO PET', {
+            fontSize: '12px',
+            fontFamily: 'monospace',
+            color: selectedPet ? '#888888' : '#ffffff'
+        });
+        noneText.setOrigin(0.5);
+        noneText.setDepth(2003);
+        elements.push(noneText);
+
+        noneBtn.on('pointerdown', () => {
+            this.playClickSound();
+            localStorage.removeItem('fortune-selected-pet');
+            elements.forEach(el => { if (el && el.destroy) el.destroy(); });
+            this.showPetsOverlay();
+        });
+
+        // Close button
+        const closeBtn = this.add.rectangle(width / 2, height / 2 + 165, 120, 40, 0x111122);
+        closeBtn.setInteractive({ useHandCursor: true });
+        closeBtn.setDepth(2002);
+        closeBtn.setStrokeStyle(2, 0xff88ff);
+        elements.push(closeBtn);
+
+        const closeText = this.add.text(width / 2, height / 2 + 165, 'CLOSE', {
+            fontSize: '16px',
+            fontFamily: 'monospace',
+            color: '#ff88ff'
+        });
+        closeText.setOrigin(0.5);
+        closeText.setDepth(2003);
+        elements.push(closeText);
+
+        closeBtn.on('pointerover', () => { closeBtn.setFillStyle(0x223344); this.playHoverSound(); });
+        closeBtn.on('pointerout', () => { closeBtn.setFillStyle(0x111122); });
+        closeBtn.on('pointerdown', () => {
+            this.playClickSound();
+            elements.forEach(el => { if (el && el.destroy) el.destroy(); });
         });
     }
 }

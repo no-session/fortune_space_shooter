@@ -30,10 +30,18 @@ export default class ScoreManager {
             accuracy: 0,
             graze: 0
         };
+
+        // Consecutive same-type chain tracking
+        this.consecutiveType = null;
+        this.consecutiveCount = 0;
+
+        // Pet score bonus (set externally by GameScene)
+        this.petScoreBonus = 0;
     }
 
     addScore(points) {
-        const finalPoints = Math.floor(points * this.comboMultiplier);
+        const petBonus = 1 + this.petScoreBonus;
+        const finalPoints = Math.floor(points * this.comboMultiplier * petBonus);
         this.score += finalPoints;
         this.updateCombo();
         return finalPoints;
@@ -83,7 +91,36 @@ export default class ScoreManager {
         this.lastCollectibleTime = time;
         this.maxCombo = Math.max(this.maxCombo, this.combo);
 
-        return this.addScore(value);
+        // Track consecutive same-type chains
+        const chainResult = this.trackChain(type);
+
+        const score = this.addScore(value);
+
+        // Return chain info along with score
+        if (chainResult) {
+            return { score, chain: chainResult };
+        }
+        return { score, chain: null };
+    }
+
+    trackChain(type) {
+        if (type === this.consecutiveType) {
+            this.consecutiveCount++;
+        } else {
+            this.consecutiveType = type;
+            this.consecutiveCount = 1;
+        }
+
+        // Return chain status for display
+        if (this.consecutiveCount === 2) {
+            return { type, count: 2, bonus: false };
+        }
+        if (this.consecutiveCount === 3) {
+            this.consecutiveCount = 0;
+            this.consecutiveType = null;
+            return { type, count: 3, bonus: true };
+        }
+        return null;
     }
 
     updateCombo() {
@@ -131,6 +168,8 @@ export default class ScoreManager {
             accuracy: 0,
             graze: 0
         };
+        this.consecutiveType = null;
+        this.consecutiveCount = 0;
     }
 
     getEnemiesKilled() {

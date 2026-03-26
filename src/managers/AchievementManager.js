@@ -1,3 +1,5 @@
+import { ACHIEVEMENT_REWARDS } from '../utils/constants.js';
+
 const ACHIEVEMENTS = [
     { id: 'first_blood', name: 'First Blood', description: 'Kill your first enemy', icon: '🗡️' },
     { id: 'combo_5', name: 'Combo Starter', description: 'Get a 5x combo', icon: '🔥' },
@@ -62,6 +64,59 @@ export default class AchievementManager {
         this.sessionUnlocked.push(this.achievements[id]);
         this.save();
         this.showToast(this.achievements[id]);
+
+        // Check for achievement reward
+        const reward = ACHIEVEMENT_REWARDS[id];
+        if (reward) {
+            this.unlockReward(id, reward);
+        }
+    }
+
+    unlockReward(achievementId, reward) {
+        // Save reward to localStorage
+        const rewards = JSON.parse(localStorage.getItem('fortune-achievement-rewards') || '{}');
+        if (rewards[achievementId]) return; // Already claimed
+        rewards[achievementId] = true;
+        localStorage.setItem('fortune-achievement-rewards', JSON.stringify(rewards));
+
+        // Show reward toast
+        this.showRewardToast(reward);
+    }
+
+    showRewardToast(reward) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: -80px;
+            left: 20px;
+            background: linear-gradient(135deg, #00ff88, #00cc66);
+            color: #000;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-family: monospace;
+            font-size: 14px;
+            z-index: 10001;
+            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.5);
+            transition: top 0.4s ease-out;
+            min-width: 250px;
+            border: 2px solid #fff;
+        `;
+        toast.innerHTML = `
+            <div style="font-size: 18px; margin-bottom: 4px;">REWARD UNLOCKED!</div>
+            <div style="font-size: 13px; color: #003300;">${reward.description}</div>
+        `;
+        document.body.appendChild(toast);
+
+        requestAnimationFrame(() => { toast.style.top = '90px'; });
+
+        setTimeout(() => {
+            toast.style.top = '-80px';
+            setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 400);
+        }, 3500);
+    }
+
+    static getUnlockedRewards() {
+        return JSON.parse(localStorage.getItem('fortune-achievement-rewards') || '{}');
     }
 
     showToast(achievement) {

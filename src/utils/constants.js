@@ -400,6 +400,72 @@ export const XP_CONFIG = {
     }
 };
 
+// Pet Types
+export const PET_TYPES = {
+    STAR_BUDDY: 'star_buddy',
+    SPACE_CAT: 'space_cat',
+    FIRE_SPRITE: 'fire_sprite',
+    GHOST_FRIEND: 'ghost_friend'
+};
+
+export const PET_CONFIG = {
+    [PET_TYPES.STAR_BUDDY]: {
+        name: 'Star Buddy',
+        color: 0xffff00,
+        unlockLevel: 3,
+        description: '+5% score bonus',
+        ability: 'score_bonus',
+        abilityValue: 0.05
+    },
+    [PET_TYPES.SPACE_CAT]: {
+        name: 'Space Cat',
+        color: 0x00ffff,
+        unlockLevel: 5,
+        description: '+20px magnet range',
+        ability: 'magnet_range',
+        abilityValue: 20
+    },
+    [PET_TYPES.FIRE_SPRITE]: {
+        name: 'Fire Sprite',
+        color: 0xff6600,
+        unlockLevel: 7,
+        description: '+2 bullet damage',
+        ability: 'extra_damage',
+        abilityValue: 2
+    },
+    [PET_TYPES.GHOST_FRIEND]: {
+        name: 'Ghost Friend',
+        color: 0xffffff,
+        unlockLevel: 10,
+        description: '5% dodge chance',
+        ability: 'dodge_chance',
+        abilityValue: 0.05
+    }
+};
+
+// Achievement Rewards
+export const ACHIEVEMENT_REWARDS = {
+    first_blood: { type: 'unlock_pet', pet: PET_TYPES.STAR_BUDDY, description: 'Star Buddy pet unlocked!' },
+    wave_10: { type: 'bonus_points', value: 500, description: '+500 starting bonus!' },
+    boss_slayer: { type: 'damage_bonus', value: 0.05, description: '+5% damage!' },
+    combo_20: { type: 'combo_window', value: 1000, description: '+1s combo window!' }
+};
+
+// Weather Types
+export const WEATHER_TYPES = {
+    NORMAL: 'normal',
+    SPACE_RAIN: 'space_rain',
+    SOLAR_FLARE: 'solar_flare',
+    NEBULA_STORM: 'nebula_storm'
+};
+
+export const WEATHER_CONFIG = {
+    [WEATHER_TYPES.NORMAL]: { name: 'Clear Skies', chance: 0.7 },
+    [WEATHER_TYPES.SPACE_RAIN]: { name: 'Space Rain', chance: 0.1, color: 0x4488ff, particleCount: 25 },
+    [WEATHER_TYPES.SOLAR_FLARE]: { name: 'Solar Flare', chance: 0.1, color: 0xff8800, enemySpeedBoost: 1.1 },
+    [WEATHER_TYPES.NEBULA_STORM]: { name: 'Nebula Storm', chance: 0.1, color: 0x8844ff, particleCount: 20 }
+};
+
 // Boss Types
 export const BOSS_TYPES = {
     MOTHERSHIP: 'mothership',

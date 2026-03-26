@@ -203,6 +203,55 @@ export default class GameOverScene extends Phaser.Scene {
         const buttonY = height - 70;
 
         this.time.delayedCall(buttonsDelay, () => {
+            // QUICK RESTART button (most prominent)
+            const restartButton = this.add.rectangle(width / 2, buttonY - 55, 260, 50, 0x00ff00);
+            restartButton.setInteractive({ useHandCursor: true });
+
+            const restartText = this.add.text(width / 2, buttonY - 55, 'QUICK RESTART [R]', {
+                fontSize: '20px',
+                fontFamily: 'monospace',
+                color: '#000000',
+                fontStyle: 'bold'
+            });
+            restartText.setOrigin(0.5);
+
+            // Pulse the restart button to attract attention
+            this.tweens.add({
+                targets: restartButton,
+                scaleX: { from: 1, to: 1.03 },
+                scaleY: { from: 1, to: 1.03 },
+                duration: 600,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+            this.tweens.add({
+                targets: restartText,
+                scaleX: { from: 1, to: 1.03 },
+                scaleY: { from: 1, to: 1.03 },
+                duration: 600,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+
+            restartButton.on('pointerover', () => {
+                restartButton.setFillStyle(0x44ff44);
+                restartButton.setScale(1.05);
+            });
+            restartButton.on('pointerout', () => {
+                restartButton.setFillStyle(0x00ff00);
+                restartButton.setScale(1);
+            });
+            restartButton.on('pointerdown', () => {
+                this.quickRestart();
+            });
+
+            // R key for quick restart
+            this.input.keyboard.on('keydown-R', () => {
+                this.quickRestart();
+            });
+
             // Menu button
             const menuButton = this.add.rectangle(width / 2 - 110, buttonY, 180, 45, 0x00ffff);
             menuButton.setInteractive({ useHandCursor: true });
@@ -253,6 +302,15 @@ export default class GameOverScene extends Phaser.Scene {
             lbButton.on('pointerdown', () => {
                 this.showLeaderboard();
             });
+        });
+    }
+
+    quickRestart() {
+        this.cameras.main.fadeOut(200, 0, 0, 0);
+        this.cameras.main.once('camerafadeoutcomplete', () => {
+            this.scene.stop('GameOverScene');
+            this.scene.stop('GameScene');
+            this.scene.start('GameScene');
         });
     }
 
