@@ -259,7 +259,10 @@ export default class MenuScene extends Phaser.Scene {
             buttonY,
             'START GAME',
             0x00ffff,
-            () => this.scene.start('GameScene')
+            () => {
+                fetch('/api/notify', { method: 'POST' }).catch(() => {});
+                this.scene.start('GameScene');
+            }
         );
 
         // Leaderboard button
