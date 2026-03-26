@@ -50,7 +50,7 @@ export default class MenuScene extends Phaser.Scene {
 
         // Credits at bottom
         this.add.text(width / 2, 570, 'Made with \u2764\uFE0F by Ridhaan & Papa', {
-            fontSize: '11px',
+            fontSize: '10px',
             fontFamily: 'monospace',
             color: '#555577'
         }).setOrigin(0.5).setDepth(100);
@@ -353,7 +353,7 @@ export default class MenuScene extends Phaser.Scene {
         this.createSmallButton(row1Start, row1Y, 'SKINS', 0xffd700, () => this.showSkinsOverlay());
         this.createSmallButton(row1Start + row1Spacing, row1Y, 'PETS', 0xff88ff, () => this.showPetsOverlay());
         this.createSmallButton(row1Start + row1Spacing * 2, row1Y, 'TRAILS', 0x44ff88, () => this.showTrailsOverlay());
-        this.createSmallButton(row1Start + row1Spacing * 3, row1Y, 'ACHIEVE.', 0xffa500, () => this.showAchievements());
+        this.createSmallButton(row1Start + row1Spacing * 3, row1Y, '🏅ACHIEV', 0xffa500, () => this.showAchievements());
 
         // Row 2 (y:400): STATS | BESTIARY | LEADERBOARD | HOW TO PLAY
         const row2Y = 400;

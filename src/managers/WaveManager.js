@@ -8,6 +8,7 @@ export default class WaveManager {
         this.waveComplete = false;
         this.bossWave = false;
         this.activeModifier = null;
+        this.formationsSpawning = 0;
 
         // Endless mode flag — set by GameScene
         this.endlessMode = false;
@@ -156,7 +157,11 @@ export default class WaveManager {
 
         // Apply modifier: double enemies
         const enemyMult = this.activeModifier ? (this.activeModifier.enemyMultiplier || 1) : 1;
-        this.enemiesRemaining = Math.floor(enemyCount * formationCount * enemyMult);
+        enemyCount = Math.floor(enemyCount * enemyMult);
+
+        // Track enemies dynamically — start at 0, add as formations actually spawn
+        this.enemiesRemaining = 0;
+        this.formationsSpawning = formationCount;
 
         // Spawn formations with longer delays for breathing room
         const formationTypes = [
@@ -184,13 +189,16 @@ export default class WaveManager {
                 const enemyType = this.getEnemyTypeForWave();
 
                 const spawnAndModify = () => {
-                    formationManager.createFormation(
+                    const formation = formationManager.createFormation(
                         formationType,
                         enemyType,
                         enemyCount,
                         startX,
                         startY
                     );
+                    // Add the actual number of spawned enemies to the count
+                    this.enemiesRemaining += formation.enemies.length;
+                    this.formationsSpawning--;
                     this.applyModifierToNewEnemies();
                 };
 
@@ -297,8 +305,8 @@ export default class WaveManager {
             this.enemiesRemaining--;
         }
 
-        // Only mark complete once
-        if (this.enemiesRemaining <= 0 && !this.waveComplete) {
+        // Only mark complete once — all formations must have spawned too
+        if (this.enemiesRemaining <= 0 && this.formationsSpawning <= 0 && !this.waveComplete) {
             this.waveComplete = true;
         }
     }
@@ -309,7 +317,7 @@ export default class WaveManager {
     }
 
     isWaveComplete() {
-        return this.waveComplete;
+        return this.waveComplete && this.formationsSpawning <= 0;
     }
 
     isBossWave() {
