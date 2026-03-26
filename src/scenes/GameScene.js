@@ -20,6 +20,7 @@ import DailyChallenge from '../managers/DailyChallenge.js';
 import TouchControls from '../ui/TouchControls.js';
 import ScreenWipe from '../effects/ScreenWipe.js';
 import Pet from '../entities/Pet.js';
+import MusicManager from '../managers/MusicManager.js';
 import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS, WEAPON_TYPES, WEAPON_CONFIG, WEAPON_UPGRADE_NAMES, HAZARD_TYPES, HAZARD_CONFIG, DRONE_CONFIG, PET_TYPES, PET_CONFIG, ACHIEVEMENT_REWARDS, WEATHER_TYPES, WEATHER_CONFIG, MINI_BOSS_CONFIG } from '../utils/constants.js';
 
 export default class GameScene extends Phaser.Scene {
@@ -215,6 +216,23 @@ export default class GameScene extends Phaser.Scene {
             this.scene.launch('PauseScene');
         });
 
+        // --- MUSIC MANAGER ---
+        this.musicManager = new MusicManager(this);
+        this.musicManager.start();
+
+        // --- EMOTE KEYS (1-4) ---
+        this.emoteKeys = {
+            1: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
+            2: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
+            3: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE),
+            4: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR)
+        };
+        this.emoteKeys[1].on('down', () => this.showEmote(1));
+        this.emoteKeys[2].on('down', () => this.showEmote(2));
+        this.emoteKeys[3].on('down', () => this.showEmote(3));
+        this.emoteKeys[4].on('down', () => this.showEmote(4));
+        this.emoteCooldown = false;
+
         // Camera: subtle follow player with lerp
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.cameras.main.setFollowOffset(0, -this.scale.height / 2 + 50);
@@ -268,6 +286,7 @@ export default class GameScene extends Phaser.Scene {
 
     showWaveNameDisplay(waveNumber) {
         const isBoss = waveNumber % 5 === 0 && waveNumber > 0;
+        if (this.musicManager) this.musicManager.setBossMode(isBoss);
         let waveName;
 
         if (isBoss) {
@@ -1441,9 +1460,11 @@ export default class GameScene extends Phaser.Scene {
         // Record kill for streak system
         const streakData = this.streakManager.recordKill(enemy.type, time);
 
-        // Calculate and add score with streak multiplier + double points event
+        // Calculate and add score with streak multiplier + double points event + wave modifier
         const eventMultiplier = this.randomEventManager ? this.randomEventManager.getPointsMultiplier() : 1;
-        const finalPoints = this.scoreManager.addKillScore(enemy.points * eventMultiplier, streakData.multiplier);
+        const waveMod = this.waveManager.getActiveModifier();
+        const wavePointsMult = waveMod ? (waveMod.pointsMultiplier || 1) : 1;
+        const finalPoints = this.scoreManager.addKillScore(enemy.points * eventMultiplier * wavePointsMult, streakData.multiplier);
 
         // Show score popup with streak info
         this.effectManager.showScorePopup(enemy.x, enemy.y, finalPoints, {
@@ -1461,9 +1482,14 @@ export default class GameScene extends Phaser.Scene {
         const explosionSize = (enemy.type === 'bomber' || enemy.type === 'elite') ? 'large' : 'medium';
         this.effectManager.createExplosion(enemy.x, enemy.y, explosionSize);
 
-        // Drop collectible
-        if (Math.random() < enemy.dropChance) {
-            this.dropCollectible(enemy.x, enemy.y);
+        // Drop collectible (with wave modifier multiplier)
+        const dropMod = this.waveManager.getActiveModifier();
+        const dropMult = dropMod ? (dropMod.dropMultiplier || 1) : 1;
+        const dropRolls = Math.max(1, Math.floor(dropMult));
+        for (let d = 0; d < dropRolls; d++) {
+            if (Math.random() < enemy.dropChance) {
+                this.dropCollectible(enemy.x + Phaser.Math.Between(-10, 10), enemy.y + Phaser.Math.Between(-10, 10));
+            }
         }
 
         // Mini-boss drops 3 power-ups
@@ -1640,6 +1666,9 @@ export default class GameScene extends Phaser.Scene {
                             this._pendingBonusStage = true;
                         }
                     } else {
+                        // Show quick wave summary before countdown
+                        this.showWaveSummary();
+
                         // Pick weather for new wave
                         const weather = this.pickWeather();
                         this.startWeather(weather);
@@ -1679,14 +1708,22 @@ export default class GameScene extends Phaser.Scene {
         // Multiple explosions
         this.createBossExplosion();
 
+        // Celebration fireworks!
+        this.effectManager.createFireworks();
+
         // Screen shake
         this.cameras.main.shake(1000, 0.03);
+
+        // Zoom out slightly to show the spectacle
+        this.cameras.main.zoomTo(0.9, 300);
 
         // Return to normal after 2s real time (adjusted for 0.5x scale)
         this.time.delayedCall(1000, () => {
             this.time.timeScale = 1;
             // Zoom back to normal after boss dies
             this.cameras.main.zoomTo(1, 500);
+            // Switch music back from boss mode
+            if (this.musicManager) this.musicManager.setBossMode(false);
         });
     }
 
@@ -2278,6 +2315,12 @@ export default class GameScene extends Phaser.Scene {
         if (this.gameOver) return;
 
         this.gameOver = true;
+
+        // Stop music
+        if (this.musicManager) {
+            this.musicManager.destroy();
+            this.musicManager = null;
+        }
 
         // Auto-screenshot with stats visible
         this.autoScreenshotGameOver();
@@ -3147,5 +3190,130 @@ export default class GameScene extends Phaser.Scene {
             'MINI-BOSS!',
             { color: '#ffd700', size: '36px', prefix: '' }
         );
+    }
+
+    // --- WAVE SUMMARY (quick 1.5s flash) ---
+    showWaveSummary() {
+        const summary = this.waveManager.getWaveSummary();
+        if (!summary || summary.wave <= 0) return;
+
+        const perfect = !this.waveDamageTaken;
+        const centerX = this.scale.width / 2;
+        const y = 50;
+
+        let label = `Wave ${summary.wave}  |  Kills: ${summary.kills}  |  Score: +${summary.score}  |  Time: ${summary.time}s`;
+        if (perfect) label += '  PERFECT!';
+
+        const text = this.add.text(centerX, y, label, {
+            fontSize: '14px',
+            fontFamily: 'monospace',
+            color: perfect ? '#00ff00' : '#00ffff',
+            stroke: '#000000',
+            strokeThickness: 3,
+            fontStyle: 'bold'
+        });
+        text.setOrigin(0.5);
+        text.setDepth(1008);
+        text.setAlpha(0);
+
+        this.tweens.add({
+            targets: text,
+            alpha: 1,
+            duration: 200,
+            onComplete: () => {
+                this.time.delayedCall(1500, () => {
+                    this.tweens.add({
+                        targets: text,
+                        alpha: 0,
+                        duration: 300,
+                        onComplete: () => text.destroy()
+                    });
+                });
+            }
+        });
+    }
+
+    // --- PLAYER EMOTES ---
+    showEmote(num) {
+        if (this.emoteCooldown || !this.player || !this.player.active) return;
+        this.emoteCooldown = true;
+        this.time.delayedCall(2500, () => { this.emoteCooldown = false; });
+
+        const emotes = {
+            1: { text: '\u{1F60E}', effect: 'none' },       // cool face
+            2: { text: '\u{1F525}', effect: 'fire' },        // fire
+            3: { text: '\u{1F4AA}', effect: 'strong' },      // strong
+            4: { text: '\u{1F602}', effect: 'laugh' }        // laughing
+        };
+
+        const emote = emotes[num];
+        if (!emote) return;
+
+        // Show emoji above ship
+        const emoji = this.add.text(this.player.x, this.player.y - 50, emote.text, {
+            fontSize: '32px'
+        });
+        emoji.setOrigin(0.5);
+        emoji.setDepth(200);
+
+        this.tweens.add({
+            targets: emoji,
+            y: this.player.y - 80,
+            alpha: 0,
+            duration: 2000,
+            ease: 'Power1',
+            onComplete: () => emoji.destroy()
+        });
+
+        // Special effects per emote
+        if (emote.effect === 'fire') {
+            // Small flame particles
+            for (let i = 0; i < 6; i++) {
+                const flame = this.add.circle(
+                    this.player.x + Phaser.Math.Between(-15, 15),
+                    this.player.y - 30,
+                    Phaser.Math.Between(2, 5),
+                    0xff6600
+                );
+                flame.setDepth(199);
+                this.tweens.add({
+                    targets: flame,
+                    y: flame.y - Phaser.Math.Between(30, 60),
+                    alpha: 0,
+                    scale: 0,
+                    duration: Phaser.Math.Between(400, 800),
+                    onComplete: () => flame.destroy()
+                });
+            }
+        } else if (emote.effect === 'strong') {
+            // Brief scale up
+            this.tweens.add({
+                targets: this.player,
+                scaleX: 1.0,
+                scaleY: 1.0,
+                duration: 200,
+                yoyo: true,
+                onComplete: () => {
+                    this.player.setScale(0.8);
+                }
+            });
+        } else if (emote.effect === 'laugh') {
+            // Wiggle side to side
+            this.tweens.add({
+                targets: this.player,
+                x: { from: this.player.x - 5, to: this.player.x + 5 },
+                duration: 80,
+                yoyo: true,
+                repeat: 5
+            });
+        }
+    }
+
+    // Cleanup music on scene shutdown
+    shutdown() {
+        if (this.musicManager) {
+            this.musicManager.destroy();
+            this.musicManager = null;
+        }
     }
 }

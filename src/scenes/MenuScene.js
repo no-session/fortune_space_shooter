@@ -65,6 +65,12 @@ export default class MenuScene extends Phaser.Scene {
         // Konami Code easter egg listener
         this.setupKonamiCode();
 
+        // Auto-show tutorial on first play (after intro)
+        if (!localStorage.getItem('fortune-tutorial-seen')) {
+            localStorage.setItem('fortune-tutorial-seen', 'true');
+            this.time.delayedCall(1500, () => this.showTutorial());
+        }
+
         // Add version text
         this.add.text(width - 10, height - 10, 'v1.0', {
             fontSize: '12px',
@@ -433,11 +439,11 @@ export default class MenuScene extends Phaser.Scene {
                     if (data.isMumbai) {
                         this.showRidhaanPrompt();
                     } else {
-                        this.fadeToScene('GameScene');
+                        this.startGameWithEffect();
                     }
                 })
                 .catch(() => {
-                    this.fadeToScene('GameScene');
+                    this.startGameWithEffect();
                 });
             }
         );
@@ -478,8 +484,13 @@ export default class MenuScene extends Phaser.Scene {
             () => this.showPetsOverlay()
         );
 
+        // HOW TO PLAY button
+        this.createSmallButton(width / 2, buttonY + 165, 'HOW TO PLAY', 0x00ff88, () => {
+            this.showTutorial();
+        });
+
         // STORY replay button (small)
-        this.createSmallButton(width / 2 - 60, buttonY + 165, 'STORY', 0x8844ff, () => {
+        this.createSmallButton(width / 2 - 80, buttonY + 200, 'STORY', 0x8844ff, () => {
             this.fadeToScene('IntroScene', { replay: true });
         });
 
@@ -487,7 +498,7 @@ export default class MenuScene extends Phaser.Scene {
         const soundLevel = localStorage.getItem('fortune-sound-level') || 'HIGH';
         const soundLabel = soundLevel === 'OFF' ? 'SOUND OFF' : soundLevel === 'LOW' ? 'SOUND LOW' : 'SOUND ON';
         this.soundBtnText = null;
-        this.createSmallButton(width / 2 + 60, buttonY + 165, soundLabel, 0x44aa44, () => {
+        this.createSmallButton(width / 2 + 80, buttonY + 200, soundLabel, 0x44aa44, () => {
             this.cycleSoundLevel();
         }, (txt) => { this.soundBtnText = txt; });
 
@@ -850,6 +861,249 @@ export default class MenuScene extends Phaser.Scene {
         current = levels[idx];
         localStorage.setItem('fortune-sound-level', current);
         if (this.soundBtnText) this.soundBtnText.setText(labels[current]);
+    }
+
+    startGameWithEffect() {
+        this.playGameStartEffect(() => {
+            this.scene.start('GameScene');
+        });
+    }
+
+    // --- TUTORIAL / HOW TO PLAY ---
+    showTutorial() {
+        const width = this.scale.width;
+        const height = this.scale.height;
+        const elements = [];
+        let currentPage = 0;
+
+        const pages = [
+            {
+                title: 'CONTROLS',
+                lines: [
+                    'WASD / Arrow Keys .... Move ship',
+                    'SPACE ................ Shoot!',
+                    'Q .................... Change weapon',
+                    'ESC .................. Pause game',
+                    '1-4 .................. Emotes!'
+                ]
+            },
+            {
+                title: 'POWER-UPS',
+                lines: [
+                    '[S] SHIELD — Absorbs 3 hits!',
+                    '[R] RAPID FIRE — 2x fire speed!',
+                    '[N] SCREEN NUKE — Destroys all enemies!',
+                    '[M] MAGNET — Attracts collectibles!',
+                    '',
+                    'Defeat enemies for a chance to drop!'
+                ]
+            },
+            {
+                title: 'TIPS',
+                lines: [
+                    'Collect coins fast for combos!',
+                    'Stay near the middle of the screen',
+                    'Watch for formation previews!',
+                    'Try different weapons (Q key)',
+                    'Graze near bullets for bonus points!',
+                    'Boss waves every 5 waves — be ready!'
+                ]
+            },
+            {
+                title: 'PETS & SKINS',
+                lines: [
+                    'Unlock cool ship skins by scoring high!',
+                    'Earn XP to level up and unlock pets!',
+                    'Each pet gives a unique bonus:',
+                    '  Star Buddy .... +5% score',
+                    '  Space Cat ..... +20px magnet range',
+                    '  Fire Sprite ... +2 bullet damage',
+                    '  Ghost Friend .. 5% dodge chance'
+                ]
+            }
+        ];
+
+        const renderPage = () => {
+            // Clear old elements
+            elements.forEach(el => { if (el && el.destroy) el.destroy(); });
+            elements.length = 0;
+
+            // Dark overlay
+            const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.9);
+            overlay.setDepth(3000);
+            elements.push(overlay);
+
+            // Panel
+            const panel = this.add.rectangle(width / 2, height / 2, 550, 420, 0x0a0a1a);
+            panel.setDepth(3001);
+            panel.setStrokeStyle(3, 0x00ff88);
+            elements.push(panel);
+
+            // Title
+            const page = pages[currentPage];
+            const titleText = this.add.text(width / 2, height / 2 - 175, `HOW TO PLAY`, {
+                fontSize: '28px', fontFamily: 'monospace', color: '#00ff88',
+                stroke: '#000000', strokeThickness: 2
+            }).setOrigin(0.5).setDepth(3002);
+            elements.push(titleText);
+
+            // Page subtitle
+            const subTitle = this.add.text(width / 2, height / 2 - 140, page.title, {
+                fontSize: '22px', fontFamily: 'monospace', color: '#ffffff',
+                fontStyle: 'bold'
+            }).setOrigin(0.5).setDepth(3002);
+            elements.push(subTitle);
+
+            // Content lines
+            const startY = height / 2 - 100;
+            page.lines.forEach((line, i) => {
+                const t = this.add.text(width / 2, startY + i * 28, line, {
+                    fontSize: '14px', fontFamily: 'monospace', color: '#bbddcc'
+                }).setOrigin(0.5).setDepth(3002);
+                elements.push(t);
+            });
+
+            // Page dots
+            for (let d = 0; d < pages.length; d++) {
+                const dotColor = d === currentPage ? 0x00ff88 : 0x444444;
+                const dot = this.add.circle(width / 2 + (d - 1.5) * 20, height / 2 + 155, 5, dotColor);
+                dot.setDepth(3002);
+                elements.push(dot);
+            }
+
+            // PREV button
+            if (currentPage > 0) {
+                const prevBg = this.add.rectangle(width / 2 - 120, height / 2 + 185, 100, 35, 0x111122);
+                prevBg.setStrokeStyle(2, 0x00ff88);
+                prevBg.setInteractive({ useHandCursor: true });
+                prevBg.setDepth(3002);
+                elements.push(prevBg);
+                const prevTxt = this.add.text(width / 2 - 120, height / 2 + 185, 'PREV', {
+                    fontSize: '14px', fontFamily: 'monospace', color: '#00ff88'
+                }).setOrigin(0.5).setDepth(3003);
+                elements.push(prevTxt);
+                prevBg.on('pointerdown', () => { this.playClickSound(); currentPage--; renderPage(); });
+                prevBg.on('pointerover', () => { prevBg.setFillStyle(0x223344); this.playHoverSound(); });
+                prevBg.on('pointerout', () => prevBg.setFillStyle(0x111122));
+            }
+
+            // NEXT button
+            if (currentPage < pages.length - 1) {
+                const nextBg = this.add.rectangle(width / 2 + 120, height / 2 + 185, 100, 35, 0x111122);
+                nextBg.setStrokeStyle(2, 0x00ff88);
+                nextBg.setInteractive({ useHandCursor: true });
+                nextBg.setDepth(3002);
+                elements.push(nextBg);
+                const nextTxt = this.add.text(width / 2 + 120, height / 2 + 185, 'NEXT', {
+                    fontSize: '14px', fontFamily: 'monospace', color: '#00ff88'
+                }).setOrigin(0.5).setDepth(3003);
+                elements.push(nextTxt);
+                nextBg.on('pointerdown', () => { this.playClickSound(); currentPage++; renderPage(); });
+                nextBg.on('pointerover', () => { nextBg.setFillStyle(0x223344); this.playHoverSound(); });
+                nextBg.on('pointerout', () => nextBg.setFillStyle(0x111122));
+            }
+
+            // CLOSE button
+            const closeBg = this.add.rectangle(width / 2, height / 2 + 185, 80, 35, 0x111122);
+            closeBg.setStrokeStyle(2, 0xff4444);
+            closeBg.setInteractive({ useHandCursor: true });
+            closeBg.setDepth(3002);
+            elements.push(closeBg);
+            const closeTxt = this.add.text(width / 2, height / 2 + 185, 'CLOSE', {
+                fontSize: '14px', fontFamily: 'monospace', color: '#ff4444'
+            }).setOrigin(0.5).setDepth(3003);
+            elements.push(closeTxt);
+            closeBg.on('pointerdown', () => {
+                this.playClickSound();
+                elements.forEach(el => { if (el && el.destroy) el.destroy(); });
+            });
+            closeBg.on('pointerover', () => { closeBg.setFillStyle(0x223344); this.playHoverSound(); });
+            closeBg.on('pointerout', () => closeBg.setFillStyle(0x111122));
+        };
+
+        renderPage();
+    }
+
+    // --- GAME START EXPLOSION EFFECT ---
+    playGameStartEffect(callback) {
+        const width = this.scale.width;
+        const height = this.scale.height;
+        const centerX = width / 2;
+        const centerY = height / 6;
+
+        // Explode title letters outward
+        const titleText = 'FORTUNE';
+        for (let i = 0; i < titleText.length; i++) {
+            const charX = centerX + (i - 3) * 45;
+            const letter = this.add.text(charX, centerY, titleText[i], {
+                fontSize: '72px', fontFamily: 'monospace', color: '#00ffff',
+                stroke: '#0080ff', strokeThickness: 4
+            }).setOrigin(0.5).setDepth(5000);
+
+            const angle = (i - 3) * 0.4 + (Math.random() - 0.5) * 0.5;
+            const dist = Phaser.Math.Between(300, 600);
+            this.tweens.add({
+                targets: letter,
+                x: charX + Math.cos(angle) * dist,
+                y: centerY + Math.sin(angle) * dist,
+                alpha: 0,
+                scale: 0.2,
+                rotation: Phaser.Math.Between(-3, 3),
+                duration: 800,
+                ease: 'Power2',
+                onComplete: () => letter.destroy()
+            });
+        }
+
+        // Starfield warp: create stretching star lines toward center
+        for (let s = 0; s < 40; s++) {
+            const sx = Phaser.Math.Between(0, width);
+            const sy = Phaser.Math.Between(0, height);
+            const star = this.add.rectangle(sx, sy, 2, 2, 0xffffff);
+            star.setDepth(4999);
+
+            // Stretch toward center of screen
+            const dx = centerX - sx;
+            const dy = height / 2 - sy;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            const nx = dx / (len || 1);
+            const ny = dy / (len || 1);
+
+            this.tweens.add({
+                targets: star,
+                x: sx + nx * 200,
+                y: sy + ny * 200,
+                scaleX: 1 + Math.abs(nx) * 15,
+                scaleY: 1 + Math.abs(ny) * 15,
+                alpha: 0,
+                duration: 600,
+                ease: 'Cubic.easeIn',
+                onComplete: () => star.destroy()
+            });
+        }
+
+        // White screen flash
+        const flash = this.add.rectangle(centerX, height / 2, width + 40, height + 40, 0xffffff, 0);
+        flash.setDepth(5001);
+
+        this.tweens.add({
+            targets: flash,
+            alpha: { from: 0, to: 1 },
+            duration: 400,
+            delay: 400,
+            onComplete: () => {
+                // Transition to game
+                this.tweens.add({
+                    targets: flash,
+                    alpha: 0,
+                    duration: 300,
+                    onComplete: () => {
+                        flash.destroy();
+                        if (callback) callback();
+                    }
+                });
+            }
+        });
     }
 
     createInstructions(width, height) {

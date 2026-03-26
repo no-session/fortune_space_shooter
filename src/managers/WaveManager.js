@@ -1,4 +1,4 @@
-import { FORMATION_TYPES, ENEMY_TYPES, BOSS_WAVE_SEQUENCE, HAZARD_TYPES, MINI_BOSS_CONFIG } from '../utils/constants.js';
+import { FORMATION_TYPES, ENEMY_TYPES, BOSS_WAVE_SEQUENCE, HAZARD_TYPES, MINI_BOSS_CONFIG, WAVE_MODIFIERS } from '../utils/constants.js';
 
 export default class WaveManager {
     constructor(scene) {
@@ -7,12 +7,32 @@ export default class WaveManager {
         this.enemiesRemaining = 0;
         this.waveComplete = false;
         this.bossWave = false;
+        this.activeModifier = null;
+
+        // Wave summary tracking
+        this.waveStartTime = 0;
+        this.waveKills = 0;
+        this.waveScoreStart = 0;
     }
 
     startWave(waveNumber) {
         this.currentWave = waveNumber;
         this.waveComplete = false;
         this.bossWave = waveNumber % 5 === 0 && waveNumber > 0;
+        this.activeModifier = null;
+
+        // Track wave stats for summary
+        this.waveStartTime = Date.now();
+        this.waveKills = 0;
+        this.waveScoreStart = this.scene.scoreManager ? this.scene.scoreManager.getScore() : 0;
+
+        // Roll for wave modifier on non-boss waves past wave 5
+        if (!this.bossWave && waveNumber > 5 && Math.random() < 0.3) {
+            const modKeys = Object.keys(WAVE_MODIFIERS);
+            const modKey = modKeys[Math.floor(Math.random() * modKeys.length)];
+            this.activeModifier = WAVE_MODIFIERS[modKey];
+            this.showModifierAnnouncement();
+        }
 
         // Spawn environmental hazards on certain waves
         this.maybeSpawnHazards();
@@ -44,19 +64,62 @@ export default class WaveManager {
         }
     }
 
+    showModifierAnnouncement() {
+        if (!this.activeModifier) return;
+        const centerX = this.scene.scale.width / 2;
+        const centerY = this.scene.scale.height / 2 + 50;
+
+        const modText = this.scene.add.text(centerX, centerY, this.activeModifier.name, {
+            fontSize: '28px',
+            fontFamily: 'monospace',
+            color: this.activeModifier.color,
+            stroke: '#000000',
+            strokeThickness: 4,
+            fontStyle: 'bold'
+        });
+        modText.setOrigin(0.5);
+        modText.setDepth(1005);
+        modText.setAlpha(0);
+
+        const descText = this.scene.add.text(centerX, centerY + 35, this.activeModifier.description, {
+            fontSize: '14px',
+            fontFamily: 'monospace',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        descText.setOrigin(0.5);
+        descText.setDepth(1005);
+        descText.setAlpha(0);
+
+        this.scene.tweens.add({
+            targets: [modText, descText],
+            alpha: 1,
+            duration: 300,
+            ease: 'Power2',
+            onComplete: () => {
+                this.scene.time.delayedCall(2000, () => {
+                    this.scene.tweens.add({
+                        targets: [modText, descText],
+                        alpha: 0,
+                        y: '-=30',
+                        duration: 500,
+                        onComplete: () => { modText.destroy(); descText.destroy(); }
+                    });
+                });
+            }
+        });
+    }
+
     startNormalWave() {
         const formationManager = this.scene.formationManager;
 
-        // Gentler difficulty scaling for better early game experience
-        // Wave 1: 4 enemies, 1 formation = 4 total
-        // Wave 2: 5 enemies, 1 formation = 5 total
-        // Wave 3: 6 enemies, 1 formation = 6 total
-        // Wave 4: 7 enemies, 2 formations = 14 total
-        // Wave 6+: continues scaling up to 10 enemies, 3 formations = 30 max
         const enemyCount = Math.min(3 + this.currentWave, 10);
         const formationCount = Math.min(1 + Math.floor(this.currentWave / 4), 3);
 
-        this.enemiesRemaining = enemyCount * formationCount;
+        // Apply modifier: double enemies
+        const enemyMult = this.activeModifier ? (this.activeModifier.enemyMultiplier || 1) : 1;
+        this.enemiesRemaining = Math.floor(enemyCount * formationCount * enemyMult);
 
         // Spawn formations with longer delays for breathing room
         const formationTypes = [
@@ -83,20 +146,7 @@ export default class WaveManager {
             this.scene.time.delayedCall(delay, () => {
                 const enemyType = this.getEnemyTypeForWave();
 
-                // Show formation preview before spawning
-                if (this.scene.showFormationPreview) {
-                    // Show preview at visible positions (translate startY to on-screen)
-                    const previewY = 80 + i * 80;
-                    this.scene.showFormationPreview(formationType, enemyCount, startX, previewY, () => {
-                        formationManager.createFormation(
-                            formationType,
-                            enemyType,
-                            enemyCount,
-                            startX,
-                            startY
-                        );
-                    });
-                } else {
+                const spawnAndModify = () => {
                     formationManager.createFormation(
                         formationType,
                         enemyType,
@@ -104,9 +154,43 @@ export default class WaveManager {
                         startX,
                         startY
                     );
+                    this.applyModifierToNewEnemies();
+                };
+
+                // Show formation preview before spawning
+                if (this.scene.showFormationPreview) {
+                    const previewY = 80 + i * 80;
+                    this.scene.showFormationPreview(formationType, enemyCount, startX, previewY, spawnAndModify);
+                } else {
+                    spawnAndModify();
                 }
             });
         }
+    }
+
+    applyModifierToNewEnemies() {
+        if (!this.activeModifier || !this.scene.enemies) return;
+
+        this.scene.enemies.children.entries.forEach((enemy, idx) => {
+            if (!enemy || !enemy.active) return;
+
+            // Speed modifier
+            if (this.activeModifier.speedMultiplier && !enemy._modApplied) {
+                enemy.speed = Math.floor(enemy.speed * this.activeModifier.speedMultiplier);
+                enemy._modApplied = true;
+            }
+
+            // Shield modifier: every Nth enemy gets extra health
+            if (this.activeModifier.shieldedEveryN && !enemy._modApplied) {
+                if ((idx + 1) % this.activeModifier.shieldedEveryN === 0) {
+                    enemy.health += this.activeModifier.shieldExtraHits * 10;
+                    enemy.maxHealth = enemy.health;
+                    // Visual: blue tint for shielded enemies
+                    enemy.setTint(0x4488ff);
+                }
+                enemy._modApplied = true;
+            }
+        });
     }
 
     getEnemyTypeForWave() {
@@ -167,6 +251,8 @@ export default class WaveManager {
     }
 
     onEnemyKilled() {
+        this.waveKills++;
+
         // Only decrement if there are enemies remaining (prevent negative counts)
         if (this.enemiesRemaining > 0) {
             this.enemiesRemaining--;
@@ -193,5 +279,22 @@ export default class WaveManager {
 
     getCurrentWave() {
         return this.currentWave;
+    }
+
+    getActiveModifier() {
+        return this.activeModifier;
+    }
+
+    getWaveSummary() {
+        const elapsed = Math.round((Date.now() - this.waveStartTime) / 1000);
+        const scoreGained = this.scene.scoreManager
+            ? this.scene.scoreManager.getScore() - this.waveScoreStart
+            : 0;
+        return {
+            wave: this.currentWave,
+            kills: this.waveKills,
+            score: scoreGained,
+            time: elapsed
+        };
     }
 }

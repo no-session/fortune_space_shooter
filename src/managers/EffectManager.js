@@ -494,6 +494,58 @@ export default class EffectManager {
         });
     }
 
+    // Boss-defeat fireworks: 10-15 bursts over 3 seconds
+    createFireworks() {
+        const burstCount = Phaser.Math.Between(10, 15);
+        const colors = [0xffd700, 0x00ffff, 0xff00ff, 0x00ff00];
+        const w = this.scene.scale.width;
+        const h = this.scene.scale.height;
+
+        for (let i = 0; i < burstCount; i++) {
+            const delay = Phaser.Math.Between(0, 3000);
+            this.scene.time.delayedCall(delay, () => {
+                const x = Phaser.Math.Between(50, w - 50);
+                const burstY = Phaser.Math.Between(60, h * 0.5);
+                const startY = h + 20;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+
+                // Rocket trail going up
+                const rocket = this.scene.add.circle(x, startY, 3, 0xffffff);
+                rocket.setDepth(300);
+
+                this.scene.tweens.add({
+                    targets: rocket,
+                    y: burstY,
+                    duration: 400,
+                    ease: 'Power2',
+                    onComplete: () => {
+                        rocket.destroy();
+                        // Explode into particles
+                        const particleCount = Phaser.Math.Between(12, 20);
+                        for (let p = 0; p < particleCount; p++) {
+                            const angle = (Math.PI * 2 * p) / particleCount;
+                            const speed = Phaser.Math.Between(40, 100);
+                            const size = Phaser.Math.Between(2, 4);
+                            const particle = this.scene.add.circle(x, burstY, size, color);
+                            particle.setDepth(300);
+
+                            this.scene.tweens.add({
+                                targets: particle,
+                                x: x + Math.cos(angle) * speed,
+                                y: burstY + Math.sin(angle) * speed + 30, // gravity pull
+                                alpha: 0,
+                                scale: 0.2,
+                                duration: Phaser.Math.Between(600, 1200),
+                                ease: 'Power2',
+                                onComplete: () => particle.destroy()
+                            });
+                        }
+                    }
+                });
+            });
+        }
+    }
+
     // Cleanup
     destroy() {
         this.activeEffects.forEach(effect => {

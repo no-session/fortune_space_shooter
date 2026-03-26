@@ -496,6 +496,45 @@ export const WEATHER_CONFIG = {
     [WEATHER_TYPES.NEBULA_STORM]: { name: 'Nebula Storm', chance: 0.1, color: 0x8844ff, particleCount: 20 }
 };
 
+// Wave Modifiers (applied to waves > 5 with 30% chance)
+export const WAVE_MODIFIERS = {
+    DOUBLE_TROUBLE: {
+        name: 'DOUBLE TROUBLE',
+        color: '#ff4444',
+        description: '2x enemies but 2x drops!',
+        enemyMultiplier: 2,
+        dropMultiplier: 2,
+        pointsMultiplier: 1
+    },
+    SPEED_RUN: {
+        name: 'SPEED RUN',
+        color: '#ffff00',
+        description: 'Fast enemies, +50% points!',
+        enemyMultiplier: 1,
+        dropMultiplier: 1,
+        pointsMultiplier: 1.5,
+        speedMultiplier: 1.4
+    },
+    SHIELD_WALL: {
+        name: 'SHIELD WALL',
+        color: '#4488ff',
+        description: 'Some enemies have shields!',
+        enemyMultiplier: 1,
+        dropMultiplier: 1,
+        pointsMultiplier: 1,
+        shieldedEveryN: 3,
+        shieldExtraHits: 2
+    },
+    TREASURE_WAVE: {
+        name: 'TREASURE WAVE',
+        color: '#ffd700',
+        description: '3x collectible drops!',
+        enemyMultiplier: 1,
+        dropMultiplier: 3,
+        pointsMultiplier: 1
+    }
+};
+
 // Boss Types
 export const BOSS_TYPES = {
     MOTHERSHIP: 'mothership',
