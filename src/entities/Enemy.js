@@ -59,7 +59,14 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         
         // Splitter gets green tint; isMini flag prevents recursive splitting
         this.isMini = false;
-        if (this.type === ENEMY_TYPES.SPLITTER) {
+
+        // --- Visual variety per enemy type ---
+        this.visualFrameCount = 0;
+        if (this.type === ENEMY_TYPES.SCOUT) {
+            // Slight random green-hue tint
+            const greenVariation = 0x00cc00 + (Math.floor(Math.random() * 0x33) << 8);
+            this.setTint(greenVariation);
+        } else if (this.type === ENEMY_TYPES.SPLITTER) {
             this.setTint(0x44ff44);
         }
 
@@ -78,13 +85,21 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         // Safety check - don't update if physics body doesn't exist
         if (!this.body || !this.active) return;
 
+        this.visualFrameCount++;
+
+        // --- Per-type visual effects ---
+        this.updateVisualEffects(time);
+
         // Update banking animation based on horizontal movement
         this.updateBankingAnimation();
 
-        // Shooting for fighters
+        // Shooting for fighters (with telegraph flash)
         if (this.stats.shoots && time > this.lastShot) {
             this.shoot();
             this.lastShot = time + this.shootInterval;
+        } else if (this.stats.shoots && this.lastShot - time < 200 && this.lastShot - time > 0) {
+            // Fighter telegraph: bright red flash 200ms before firing
+            if (!this.frozen) this.setTint(0xff2222);
         }
 
         // Update position based on formation or individual movement
@@ -95,6 +110,44 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
 
         // Individual movement
         this.setVelocity(this.velocityX, this.velocityY);
+    }
+
+    updateVisualEffects(time) {
+        if (this.frozen) return; // don't override freeze tint
+
+        switch (this.type) {
+            case ENEMY_TYPES.BOMBER:
+                // Pulsing size: scale between 0.7 and 0.8
+                {
+                    const pulse = 0.7 + 0.1 * (0.5 + 0.5 * Math.sin(time * 0.004));
+                    this.setScale(this.isMini ? pulse * 0.65 : pulse);
+                }
+                break;
+
+            case ENEMY_TYPES.ELITE:
+                // Rotating shield circle (visual only)
+                if (!this.shieldCircle && this.scene) {
+                    this.shieldCircle = this.scene.add.circle(this.x, this.y, 24, 0x00ffff, 0);
+                    this.shieldCircle.setStrokeStyle(1.5, 0x00ffff, 0.4);
+                    this.shieldCircle.setDepth(this.depth - 1);
+                }
+                if (this.shieldCircle) {
+                    const r = 24 + 3 * Math.sin(time * 0.005);
+                    this.shieldCircle.setPosition(this.x, this.y);
+                    this.shieldCircle.setRadius(r);
+                }
+                break;
+
+            case ENEMY_TYPES.SPLITTER:
+                // Pulsing green glow
+                {
+                    const g = 0x44 + Math.floor(0x33 * (0.5 + 0.5 * Math.sin(time * 0.006)));
+                    this.setTint((g << 8) | 0x0000ff & 0x44ff44 | (g << 8));
+                    // Simpler: alternate between two greens
+                    this.setTint(this.visualFrameCount % 30 < 15 ? 0x44ff44 : 0x88ff88);
+                }
+                break;
+        }
     }
 
     updateBankingAnimation() {
@@ -153,9 +206,14 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         // Flash effect
         this.setTint(0xffffff);
         this.scene.time.delayedCall(50, () => {
-            // Restore freeze tint if frozen, otherwise clear
+            // Restore freeze tint if frozen, restore type tint, or clear
             if (this.frozen) {
                 this.setTint(0x4488ff);
+            } else if (this.type === ENEMY_TYPES.SPLITTER) {
+                this.setTint(0x44ff44);
+            } else if (this.type === ENEMY_TYPES.SCOUT) {
+                // Re-apply green tint
+                this.setTint(0x00dd00);
             } else {
                 this.clearTint();
             }
@@ -266,6 +324,11 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     destroy() {
+        // Clean up visual effects
+        if (this.shieldCircle) {
+            this.shieldCircle.destroy();
+            this.shieldCircle = null;
+        }
         // Clean up bullets when enemy is destroyed (even if not through die())
         if (this.bullets) {
             this.bullets.clear(true, true);

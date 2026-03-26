@@ -65,6 +65,11 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         this.magnetActive = false;
         this.baseMagnetRange = 80;
         
+        // Mobile velocity (set by TouchControls)
+        this.mobileVelocityX = 0;
+        this.mobileVelocityY = 0;
+        this.mobileActive = false;
+
         // Set up input
         this.setupInput();
 
@@ -236,26 +241,31 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
             }
         }
 
-        // Movement
+        // Movement — mobile joystick takes priority when active
         let velocityX = 0;
         let velocityY = 0;
 
-        if (this.cursors.left.isDown || this.wasd.A.isDown) {
-            velocityX = -this.speed;
-        } else if (this.cursors.right.isDown || this.wasd.D.isDown) {
-            velocityX = this.speed;
-        }
+        if (this.mobileActive) {
+            velocityX = this.mobileVelocityX;
+            velocityY = this.mobileVelocityY;
+        } else {
+            if (this.cursors.left.isDown || this.wasd.A.isDown) {
+                velocityX = -this.speed;
+            } else if (this.cursors.right.isDown || this.wasd.D.isDown) {
+                velocityX = this.speed;
+            }
 
-        if (this.cursors.up.isDown || this.wasd.W.isDown) {
-            velocityY = -this.speed;
-        } else if (this.cursors.down.isDown || this.wasd.S.isDown) {
-            velocityY = this.speed;
-        }
+            if (this.cursors.up.isDown || this.wasd.W.isDown) {
+                velocityY = -this.speed;
+            } else if (this.cursors.down.isDown || this.wasd.S.isDown) {
+                velocityY = this.speed;
+            }
 
-        // Normalize diagonal movement
-        if (velocityX !== 0 && velocityY !== 0) {
-            velocityX *= 0.707;
-            velocityY *= 0.707;
+            // Normalize diagonal movement
+            if (velocityX !== 0 && velocityY !== 0) {
+                velocityX *= 0.707;
+                velocityY *= 0.707;
+            }
         }
 
         this.setVelocity(velocityX, velocityY);
@@ -611,6 +621,12 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     getMagnetRange() {
         return this.magnetActive ? 200 : this.baseMagnetRange;
+    }
+
+    setMobileVelocity(x, y) {
+        this.mobileVelocityX = x;
+        this.mobileVelocityY = y;
+        this.mobileActive = (x !== 0 || y !== 0);
     }
 
     isAlive() {

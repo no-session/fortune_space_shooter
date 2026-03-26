@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import ChatBox from '../ui/ChatBox.js';
+import DailyChallenge from '../managers/DailyChallenge.js';
 import { SHIP_SKINS, DIFFICULTY_MODES } from '../utils/constants.js';
 
 export default class MenuScene extends Phaser.Scene {
@@ -37,6 +38,9 @@ export default class MenuScene extends Phaser.Scene {
 
         // Add decorative player ship
         this.createHeroShip(width, height);
+
+        // Daily challenge banner
+        this.createDailyChallengeBanner(width, height);
 
         // Add version text
         this.add.text(width - 10, height - 10, 'v1.0', {
@@ -131,6 +135,35 @@ export default class MenuScene extends Phaser.Scene {
             }
         } catch (e) {
             // Ignore sound errors
+        }
+    }
+
+    createDailyChallengeBanner(width, height) {
+        const dc = new DailyChallenge();
+        const bannerY = height - 55;
+
+        // Banner background
+        const bg = this.add.rectangle(width / 2, bannerY, 500, 36, 0x111133, 0.8);
+        bg.setStrokeStyle(1, 0xffd700, 0.5);
+        bg.setDepth(12);
+
+        if (dc.completed) {
+            const text = this.add.text(width / 2, bannerY, 'DAILY CHALLENGE: COMPLETED!', {
+                fontSize: '14px', fontFamily: 'monospace', color: '#00ff00', fontStyle: 'bold'
+            }).setOrigin(0.5).setDepth(13);
+        } else {
+            const text = this.add.text(width / 2, bannerY, `DAILY CHALLENGE: ${dc.description}`, {
+                fontSize: '13px', fontFamily: 'monospace', color: '#ffd700'
+            }).setOrigin(0.5).setDepth(13);
+
+            // Subtle pulse
+            this.tweens.add({
+                targets: text,
+                alpha: { from: 1, to: 0.6 },
+                duration: 1200,
+                yoyo: true,
+                repeat: -1
+            });
         }
     }
 

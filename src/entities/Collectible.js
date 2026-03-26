@@ -1,5 +1,14 @@
 import Phaser from 'phaser';
-import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG } from '../utils/constants.js';
+import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG, COLORS } from '../utils/constants.js';
+
+// Trail colors per collectible type
+const TRAIL_COLORS = {
+    [COLLECTIBLE_TYPES.COIN]: 0xffd700,
+    [COLLECTIBLE_TYPES.CRYSTAL]: 0x00bfff,
+    [COLLECTIBLE_TYPES.STAR]: 0xffff00,
+    [COLLECTIBLE_TYPES.FORTUNE_COIN]: null // rainbow — cycled
+};
+const RAINBOW = [0xff0000, 0xff8800, 0xffff00, 0x00ff00, 0x0088ff, 0xff00ff];
 
 // Texture mapping for collectibles
 const COLLECTIBLE_TEXTURES = {
@@ -34,6 +43,10 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
             this.setVelocity(drift, this.speed);
         }
 
+        // Trail particles
+        this.trailParticles = [];
+        this.trailFrameCount = 0;
+
         // Magnetic attraction settings
         this.magnetRange = 80; // pixels
         this.magnetStrength = 400; // speed when attracted
@@ -66,6 +79,12 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
 
     update(player) {
         if (this.collected || !this.active) return;
+
+        // Spawn trail sparkle every 4 frames
+        this.trailFrameCount++;
+        if (this.trailFrameCount % 4 === 0 && this.scene) {
+            this.spawnTrailParticle();
+        }
 
         const currentTime = this.scene.time.now;
         const age = currentTime - this.createdAt;
@@ -190,6 +209,40 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
         }
     }
 
+    spawnTrailParticle() {
+        // Determine color
+        let color;
+        if (this.type === COLLECTIBLE_TYPES.FORTUNE_COIN) {
+            color = RAINBOW[this.trailFrameCount % RAINBOW.length];
+        } else {
+            color = TRAIL_COLORS[this.type] || 0xffffff;
+        }
+
+        const dot = this.scene.add.circle(this.x, this.y, 2, color);
+        dot.setDepth(69);
+        dot.setAlpha(0.8);
+        this.trailParticles.push(dot);
+
+        // Fade out over 300ms
+        this.scene.tweens.add({
+            targets: dot,
+            alpha: 0,
+            scale: 0.3,
+            duration: 300,
+            onComplete: () => {
+                dot.destroy();
+                const idx = this.trailParticles.indexOf(dot);
+                if (idx >= 0) this.trailParticles.splice(idx, 1);
+            }
+        });
+
+        // Keep max 4 trail particles
+        while (this.trailParticles.length > 4) {
+            const old = this.trailParticles.shift();
+            if (old) old.destroy();
+        }
+    }
+
     stopTweens() {
         if (this.tweens) {
             this.tweens.forEach(tween => {
@@ -203,6 +256,11 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
 
     destroy() {
         this.stopTweens();
+        // Clean up trail particles
+        if (this.trailParticles) {
+            this.trailParticles.forEach(p => { if (p) p.destroy(); });
+            this.trailParticles = [];
+        }
         super.destroy();
     }
 }

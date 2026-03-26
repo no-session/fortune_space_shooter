@@ -13,6 +13,8 @@ import EffectManager from '../managers/EffectManager.js';
 import RandomEventManager from '../managers/RandomEventManager.js';
 import AchievementManager from '../managers/AchievementManager.js';
 import BonusSystem from '../systems/BonusSystem.js';
+import DailyChallenge from '../managers/DailyChallenge.js';
+import TouchControls from '../ui/TouchControls.js';
 import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS } from '../utils/constants.js';
 
 export default class GameScene extends Phaser.Scene {
@@ -45,6 +47,19 @@ export default class GameScene extends Phaser.Scene {
             this.player.maxHealth = Math.floor(GAME_CONFIG.PLAYER_HEALTH * this.difficulty.healthMultiplier);
             this.player.health = this.player.maxHealth;
         }
+
+        // Touch controls for mobile
+        this.touchControls = null;
+        if (TouchControls.isTouchDevice()) {
+            this.touchControls = new TouchControls(this.player);
+        }
+
+        // Daily challenge tracking
+        this.dailyChallenge = new DailyChallenge();
+        this.dailyChallengeCoins = 0;
+
+        // Spin power-up pending from shop
+        this._spinPowerUpPending = false;
 
         // Create groups
         this.enemies = this.physics.add.group();
@@ -320,6 +335,7 @@ export default class GameScene extends Phaser.Scene {
                 this.scoreManager.addCollectible(value, this.game.getTime(), type);
                 if (this.achievementManager) this.achievementManager.onCollectibleCollected();
                 if (this.bonusStageActive) this.bonusStageCollected++;
+                if (type === COLLECTIBLE_TYPES.COIN || type === COLLECTIBLE_TYPES.FORTUNE_COIN) this.dailyChallengeCoins++;
                 this.updateUI();
 
                 // Collect the item (handles effects and destruction)
@@ -585,6 +601,26 @@ export default class GameScene extends Phaser.Scene {
             this.lastComboAnnouncement = 0;
         }
 
+        // Daily challenge progress tracking
+        if (this.dailyChallenge && !this.dailyChallenge.completed) {
+            const justCompleted = this.dailyChallenge.trackProgress({
+                wave: this.waveManager.getCurrentWave(),
+                combo: currentCombo,
+                kills: this.totalKills,
+                coins: this.dailyChallengeCoins
+            });
+            if (justCompleted) {
+                this.showDailyChallengeComplete();
+            }
+        }
+
+        // Apply pending spin power-up
+        if (this._spinPowerUpPending) {
+            this._spinPowerUpPending = false;
+            const types = Object.values(POWERUP_TYPES);
+            this.applyPowerUp(types[Phaser.Math.Between(0, types.length - 1)]);
+        }
+
         // Graze detection for enemy bullets
         if (this.player && this.player.active && !this.player.invincible) {
             this.enemyBullets.children.entries.forEach(bullet => {
@@ -671,6 +707,7 @@ export default class GameScene extends Phaser.Scene {
                         this.scoreManager.addCollectible(value, this.game.getTime(), type);
                         if (this.achievementManager) this.achievementManager.onCollectibleCollected();
                         if (this.bonusStageActive) this.bonusStageCollected++;
+                        if (type === COLLECTIBLE_TYPES.COIN || type === COLLECTIBLE_TYPES.FORTUNE_COIN) this.dailyChallengeCoins++;
                         this.updateUI();
                         if (typeof collectible.collect === 'function') {
                             collectible.collect();
@@ -961,6 +998,11 @@ export default class GameScene extends Phaser.Scene {
         if (this.achievementManager && this.player) {
             const healthPct = this.player.health / this.player.maxHealth;
             this.achievementManager.onBossDefeated(healthPct);
+
+            // Daily challenge: boss on wave 5 with health check
+            if (this.dailyChallenge && this.waveManager.getCurrentWave() === 5) {
+                this.dailyChallenge.trackProgress({ bossDefeatedWithHpPercent: healthPct });
+            }
         }
 
         // EPIC boss death: slow motion
@@ -1517,11 +1559,57 @@ export default class GameScene extends Phaser.Scene {
         });
     }
 
+    showDailyChallengeComplete() {
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2 - 40;
+
+        // Award bonus points
+        this.scoreManager.addBonusScore(this.dailyChallenge.getBonusPoints(), 'daily');
+
+        const text = this.add.text(centerX, centerY, 'DAILY CHALLENGE COMPLETE!\n+2000 BONUS', {
+            fontSize: '24px',
+            fontFamily: 'monospace',
+            color: '#ffd700',
+            stroke: '#000000',
+            strokeThickness: 4,
+            fontStyle: 'bold',
+            align: 'center'
+        });
+        text.setOrigin(0.5);
+        text.setDepth(EFFECT_CONFIG.DEPTH_STREAK_ANNOUNCEMENT + 30);
+        text.setAlpha(0);
+
+        this.tweens.add({
+            targets: text,
+            alpha: 1,
+            scale: { from: 2, to: 1 },
+            duration: 400,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.time.delayedCall(2500, () => {
+                    this.tweens.add({
+                        targets: text,
+                        alpha: 0, y: centerY - 50, duration: 500,
+                        onComplete: () => text.destroy()
+                    });
+                });
+            }
+        });
+
+        this.effectManager.confetti(centerX, centerY - 30, 40, [0xffd700, 0xffaa00, 0xffff00]);
+    }
+
     triggerGameOver() {
         if (this.gameOver) return;
 
         this.gameOver = true;
         this.scene.pause();
+
+        // Clean up touch controls
+        if (this.touchControls) {
+            this.touchControls.destroy();
+            this.touchControls = null;
+        }
 
         // Gather all stats
         const finalScore = this.scoreManager.getScore();
