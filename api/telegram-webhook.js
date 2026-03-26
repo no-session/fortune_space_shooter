@@ -34,7 +34,7 @@ export default async function handler(req, res) {
   });
 
   await redis.rpush(CHAT_KEY, chatMessage).catch(() => {});
-  await redis.expire(CHAT_KEY, 3600).catch(() => {}); // 1 hour TTL
+  await redis.expire(CHAT_KEY, 86400).catch(() => {}); // 1 hour TTL
 
   return res.status(200).json({ ok: true });
 }

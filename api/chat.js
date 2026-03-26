@@ -6,6 +6,7 @@ const redis = new Redis({
 });
 
 const CHAT_KEY = 'fortune-chat-messages';
+const READ_INDEX_KEY = 'fortune-chat-read-index';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -22,8 +23,17 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Bot token not configured' });
     }
 
-    const text = '💬 Ridhaan: ' + message;
+    // Store Ridhaan's message too (for history)
+    const chatMessage = JSON.stringify({
+      from: 'ridhaan',
+      text: message,
+      timestamp: Date.now()
+    });
+    await redis.rpush(CHAT_KEY, chatMessage).catch(() => {});
+    await redis.expire(CHAT_KEY, 86400).catch(() => {}); // 24 hour TTL
 
+    // Forward to Telegram
+    const text = '💬 Ridhaan: ' + message;
     await fetch('https://api.telegram.org/bot' + botToken + '/sendMessage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -34,15 +44,35 @@ export default async function handler(req, res) {
   }
 
   if (action === 'poll') {
-    // Get all messages from Redis list
+    // Get all messages
     const messages = await redis.lrange(CHAT_KEY, 0, -1).catch(() => []);
-    
-    // Clear after reading
-    if (messages && messages.length > 0) {
-      await redis.del(CHAT_KEY).catch(() => {});
+
+    // Get read index (how many Ridhaan has already seen)
+    const readIndex = parseInt(await redis.get(READ_INDEX_KEY).catch(() => '0')) || 0;
+
+    // Return only unread messages, but also include recent history on first load
+    const allMessages = (messages || []).map(m => typeof m === 'string' ? JSON.parse(m) : m);
+    const unread = allMessages.slice(readIndex);
+
+    // Update read index
+    if (allMessages.length > readIndex) {
+      await redis.set(READ_INDEX_KEY, allMessages.length).catch(() => {});
+      await redis.expire(READ_INDEX_KEY, 86400).catch(() => {});
     }
 
-    return res.status(200).json({ messages: messages || [] });
+    return res.status(200).json({ messages: unread, total: allMessages.length });
+  }
+
+  if (action === 'history') {
+    // Return full chat history (for when chat box opens)
+    const messages = await redis.lrange(CHAT_KEY, 0, -1).catch(() => []);
+    const allMessages = (messages || []).map(m => typeof m === 'string' ? JSON.parse(m) : m);
+
+    // Mark all as read
+    await redis.set(READ_INDEX_KEY, allMessages.length).catch(() => {});
+    await redis.expire(READ_INDEX_KEY, 86400).catch(() => {});
+
+    return res.status(200).json({ messages: allMessages });
   }
 
   res.status(200).json({ ok: true });
