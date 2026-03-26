@@ -260,8 +260,22 @@ export default class MenuScene extends Phaser.Scene {
             'START GAME',
             0x00ffff,
             () => {
-                fetch('/api/notify', { method: 'POST' }).catch(() => {});
-                this.scene.start('GameScene');
+                fetch('/api/notify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'start' })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.isMumbai) {
+                        this.showRidhaanPrompt();
+                    } else {
+                        this.scene.start('GameScene');
+                    }
+                })
+                .catch(() => {
+                    this.scene.start('GameScene');
+                });
             }
         );
 
@@ -730,5 +744,101 @@ export default class MenuScene extends Phaser.Scene {
     getLeaderboard() {
         const scores = JSON.parse(localStorage.getItem('fortune_leaderboard') || '[]');
         return scores.sort((a, b) => b - a).slice(0, 10);
+    }
+
+
+    showRidhaanPrompt() {
+        const width = this.scale.width;
+        const height = this.scale.height;
+
+        // Dim overlay
+        const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7);
+        overlay.setDepth(2000);
+
+        // Question text
+        const questionText = this.add.text(width / 2, height / 2 - 60, 'Is this Ridhaan? 🎮', {
+            fontSize: '28px',
+            fontFamily: 'monospace',
+            color: '#00ffff',
+            stroke: '#000000',
+            strokeThickness: 4
+        });
+        questionText.setOrigin(0.5);
+        questionText.setDepth(2001);
+
+        // Yes button
+        const yesBtn = this.add.text(width / 2 - 80, height / 2 + 20, '✅ YES!', {
+            fontSize: '24px',
+            fontFamily: 'monospace',
+            color: '#00ff00',
+            stroke: '#000000',
+            strokeThickness: 3,
+            backgroundColor: '#003300',
+            padding: { x: 15, y: 10 }
+        });
+        yesBtn.setOrigin(0.5);
+        yesBtn.setDepth(2001);
+        yesBtn.setInteractive({ useHandCursor: true });
+
+        // No button
+        const noBtn = this.add.text(width / 2 + 80, height / 2 + 20, '❌ Nope', {
+            fontSize: '24px',
+            fontFamily: 'monospace',
+            color: '#ff6666',
+            stroke: '#000000',
+            strokeThickness: 3,
+            backgroundColor: '#330000',
+            padding: { x: 15, y: 10 }
+        });
+        noBtn.setOrigin(0.5);
+        noBtn.setDepth(2001);
+        noBtn.setInteractive({ useHandCursor: true });
+
+        // Yes → fetch personal message, show it, then start game
+        yesBtn.on('pointerdown', () => {
+            fetch('/api/notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'confirm_ridhaan' })
+            })
+            .then(r => r.json())
+            .then(data => {
+                // Clear prompt
+                overlay.destroy();
+                questionText.destroy();
+                yesBtn.destroy();
+                noBtn.destroy();
+
+                // Show personal message
+                const msg = this.add.text(width / 2, height / 2, data.message || 'Have fun! 🚀', {
+                    fontSize: '22px',
+                    fontFamily: 'monospace',
+                    color: '#ffd700',
+                    stroke: '#000000',
+                    strokeThickness: 4,
+                    align: 'center',
+                    wordWrap: { width: width - 80 }
+                });
+                msg.setOrigin(0.5);
+                msg.setDepth(2001);
+
+                // Start game after showing message
+                this.time.delayedCall(3000, () => {
+                    this.scene.start('GameScene');
+                });
+            })
+            .catch(() => {
+                this.scene.start('GameScene');
+            });
+        });
+
+        // No → just start the game
+        noBtn.on('pointerdown', () => {
+            overlay.destroy();
+            questionText.destroy();
+            yesBtn.destroy();
+            noBtn.destroy();
+            this.scene.start('GameScene');
+        });
     }
 }
