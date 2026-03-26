@@ -1,9 +1,12 @@
 export default class SoundManager {
     constructor(scene) {
         this.scene = scene;
-        this.soundsEnabled = true;
-        this.musicEnabled = true;
-        this.volume = 0.5;
+
+        // Read sound preference from localStorage
+        const soundLevel = localStorage.getItem('fortune-sound-level') || 'HIGH';
+        this.soundsEnabled = soundLevel !== 'OFF';
+        this.musicEnabled = soundLevel !== 'OFF';
+        this.volume = soundLevel === 'LOW' ? 0.25 : soundLevel === 'OFF' ? 0 : 0.5;
 
         // Check which sounds are available
         this.sounds = {
@@ -76,5 +79,21 @@ export default class SoundManager {
     toggleMusic() {
         this.musicEnabled = !this.musicEnabled;
         return this.musicEnabled;
+    }
+
+    /** Cycle through OFF → LOW → HIGH and persist */
+    cycleSoundLevel() {
+        const levels = ['HIGH', 'LOW', 'OFF'];
+        const soundLevel = localStorage.getItem('fortune-sound-level') || 'HIGH';
+        const idx = (levels.indexOf(soundLevel) + 1) % levels.length;
+        const next = levels[idx];
+        localStorage.setItem('fortune-sound-level', next);
+        this.soundsEnabled = next !== 'OFF';
+        this.volume = next === 'LOW' ? 0.25 : next === 'OFF' ? 0 : 0.5;
+        return next;
+    }
+
+    getSoundLevel() {
+        return localStorage.getItem('fortune-sound-level') || 'HIGH';
     }
 }

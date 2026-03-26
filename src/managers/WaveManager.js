@@ -1,4 +1,4 @@
-import { FORMATION_TYPES, ENEMY_TYPES, BOSS_WAVE_SEQUENCE, HAZARD_TYPES } from '../utils/constants.js';
+import { FORMATION_TYPES, ENEMY_TYPES, BOSS_WAVE_SEQUENCE, HAZARD_TYPES, MINI_BOSS_CONFIG } from '../utils/constants.js';
 
 export default class WaveManager {
     constructor(scene) {
@@ -21,6 +21,15 @@ export default class WaveManager {
             this.startBossWave();
         } else {
             this.startNormalWave();
+
+            // Mini-boss on every 3rd non-boss wave (3, 6, 9, 12... but NOT 5, 10, 15...)
+            if (waveNumber >= 3 && waveNumber % 3 === 0 && waveNumber % 5 !== 0) {
+                this.scene.time.delayedCall(3000, () => {
+                    if (this.scene.spawnMiniBoss) {
+                        this.scene.spawnMiniBoss();
+                    }
+                });
+            }
         }
     }
 

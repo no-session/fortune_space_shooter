@@ -33,7 +33,7 @@ export default class GameOverScene extends Phaser.Scene {
         this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.85);
 
         // Game Over text
-        const gameOverText = this.add.text(width / 2, 45, 'GAME OVER', {
+        const gameOverText = this.add.text(width / 2, 40, 'GAME OVER', {
             fontSize: '42px',
             fontFamily: 'monospace',
             color: '#ff0000',
@@ -42,11 +42,12 @@ export default class GameOverScene extends Phaser.Scene {
         });
         gameOverText.setOrigin(0.5);
 
-        // Game number
-        this.add.text(width / 2, 80, `Game #${gamesPlayed}`, {
-            fontSize: '14px',
+        // Pilot name
+        const pilotName = localStorage.getItem('fortune-pilot-name') || 'Pilot';
+        this.add.text(width / 2, 72, `Commander ${pilotName}  |  Game #${gamesPlayed}`, {
+            fontSize: '13px',
             fontFamily: 'monospace',
-            color: '#888888'
+            color: '#88ccff'
         }).setOrigin(0.5);
 
         // Star rating
@@ -170,8 +171,11 @@ export default class GameOverScene extends Phaser.Scene {
             });
         });
 
-        // Save score
+        // Save score locally
         this.saveScore(this.score);
+
+        // Submit to online leaderboard
+        this.submitOnlineScore();
 
         // New high score indicator
         const leaderboard = this.getLeaderboard();
@@ -323,6 +327,22 @@ export default class GameOverScene extends Phaser.Scene {
 
     getLeaderboard() {
         return JSON.parse(localStorage.getItem('fortune_leaderboard') || '[]');
+    }
+
+    submitOnlineScore() {
+        const name = localStorage.getItem('fortune-pilot-name') || 'Pilot';
+        fetch('/api/leaderboard', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'submit',
+                name: name,
+                score: this.score,
+                wave: this.wave
+            })
+        }).catch(() => {
+            // Silently fail if offline
+        });
     }
 
     showLeaderboard() {

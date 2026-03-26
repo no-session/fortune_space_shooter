@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DRONE_CONFIG } from '../utils/constants.js';
+import { DRONE_CONFIG, WEAPON_UPGRADE_NAMES, WEAPON_TYPES } from '../utils/constants.js';
 
 const UPGRADE_ICONS = {
     'Weapon Upgrade': { emoji: 'W', color: 0xff4444 },
@@ -72,7 +72,8 @@ export default class ShopScene extends Phaser.Scene {
         let statsLine = '';
         if (gameScene && gameScene.player) {
             const p = gameScene.player;
-            statsLine = `Weapon Lv${p.weaponLevel}  |  Speed ${p.speed}  |  HP ${p.health}/${p.maxHealth}  |  Lives ${p.lives}`;
+            const weaponName = this.getWeaponName(p.currentWeapon, p.weaponLevel);
+            statsLine = `${weaponName}  |  Speed ${p.speed}  |  HP ${p.health}/${p.maxHealth}  |  Lives ${p.lives}`;
         }
         this.statsText = this.add.text(width / 2, 115, statsLine, {
             fontSize: '13px', fontFamily: 'monospace', color: '#888888'
@@ -201,10 +202,20 @@ export default class ShopScene extends Phaser.Scene {
         const gameScene = this.scene.get('GameScene');
         if (gameScene && gameScene.player) {
             const p = gameScene.player;
+            const weaponName = this.getWeaponName(p.currentWeapon, p.weaponLevel);
             this.statsText.setText(
-                `Weapon Lv${p.weaponLevel}  |  Speed ${p.speed}  |  HP ${p.health}/${p.maxHealth}  |  Lives ${p.lives}`
+                `${weaponName}  |  Speed ${p.speed}  |  HP ${p.health}/${p.maxHealth}  |  Lives ${p.lives}`
             );
         }
+    }
+
+    getWeaponName(weaponType, level) {
+        const names = WEAPON_UPGRADE_NAMES[weaponType || WEAPON_TYPES.BLASTER];
+        if (names) {
+            const maxLevel = Math.max(...Object.keys(names).map(Number));
+            return names[Math.min(level, maxLevel)] || names[maxLevel];
+        }
+        return `Weapon Lv${level}`;
     }
 
     purchaseUpgrade(name) {

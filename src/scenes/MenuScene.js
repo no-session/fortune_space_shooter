@@ -197,7 +197,7 @@ export default class MenuScene extends Phaser.Scene {
         });
     }
 
-    fadeToScene(sceneKey, data) {
+    fadeToScene(sceneKey, data = {}) {
         this.cameras.main.fadeOut(300, 0, 0, 0);
         this.cameras.main.once('camerafadeoutcomplete', () => {
             this.scene.start(sceneKey, data);
@@ -366,8 +366,19 @@ export default class MenuScene extends Phaser.Scene {
             repeat: subtitleText.length - 1
         });
 
+        // Pilot name display
+        const pilotName = localStorage.getItem('fortune-pilot-name') || 'Pilot';
+        const pilotText = this.add.text(width / 2, height / 6 + 108, `Commander ${pilotName}`, {
+            fontSize: '14px',
+            fontFamily: 'monospace',
+            color: '#44ff88',
+            fontStyle: 'bold'
+        });
+        pilotText.setOrigin(0.5);
+        pilotText.setDepth(11);
+
         // Blinking tagline
-        const tagline = this.add.text(width / 2, height / 6 + 120, 'DEFEND THE GALAXY', {
+        const tagline = this.add.text(width / 2, height / 6 + 128, 'DEFEND THE GALAXY', {
             fontSize: '14px',
             fontFamily: 'monospace',
             color: '#ffff00'
@@ -466,6 +477,19 @@ export default class MenuScene extends Phaser.Scene {
             0xff88ff,
             () => this.showPetsOverlay()
         );
+
+        // STORY replay button (small)
+        this.createSmallButton(width / 2 - 60, buttonY + 165, 'STORY', 0x8844ff, () => {
+            this.fadeToScene('IntroScene', { replay: true });
+        });
+
+        // SOUND toggle button (small)
+        const soundLevel = localStorage.getItem('fortune-sound-level') || 'HIGH';
+        const soundLabel = soundLevel === 'OFF' ? 'SOUND OFF' : soundLevel === 'LOW' ? 'SOUND LOW' : 'SOUND ON';
+        this.soundBtnText = null;
+        this.createSmallButton(width / 2 + 60, buttonY + 165, soundLabel, 0x44aa44, () => {
+            this.cycleSoundLevel();
+        }, (txt) => { this.soundBtnText = txt; });
 
         // Blinking "INSERT COIN" text
         const insertCoin = this.add.text(width / 2, buttonY - 30, '[ PRESS START ]', {
@@ -791,6 +815,41 @@ export default class MenuScene extends Phaser.Scene {
         });
 
         return { button, outerBorder, buttonText };
+    }
+
+    createSmallButton(x, y, text, color, callback, textRefCallback) {
+        const btn = this.add.rectangle(x, y, 100, 30, 0x111122);
+        btn.setStrokeStyle(1, color);
+        btn.setInteractive({ useHandCursor: true });
+        btn.setDepth(10);
+
+        const txt = this.add.text(x, y, text, {
+            fontSize: '11px',
+            fontFamily: 'monospace',
+            color: Phaser.Display.Color.IntegerToColor(color).rgba
+        }).setOrigin(0.5).setDepth(11);
+
+        if (textRefCallback) textRefCallback(txt);
+
+        btn.on('pointerover', () => {
+            btn.setFillStyle(0x223344);
+            this.playHoverSound();
+        });
+        btn.on('pointerout', () => btn.setFillStyle(0x111122));
+        btn.on('pointerdown', () => {
+            this.playClickSound();
+            callback();
+        });
+    }
+
+    cycleSoundLevel() {
+        const levels = ['HIGH', 'LOW', 'OFF'];
+        const labels = { HIGH: 'SOUND ON', LOW: 'SOUND LOW', OFF: 'SOUND OFF' };
+        let current = localStorage.getItem('fortune-sound-level') || 'HIGH';
+        const idx = (levels.indexOf(current) + 1) % levels.length;
+        current = levels[idx];
+        localStorage.setItem('fortune-sound-level', current);
+        if (this.soundBtnText) this.soundBtnText.setText(labels[current]);
     }
 
     createInstructions(width, height) {
@@ -1145,113 +1204,173 @@ export default class MenuScene extends Phaser.Scene {
     }
 
     showLeaderboard() {
-        const scores = this.getLeaderboard();
         const width = this.scale.width;
         const height = this.scale.height;
 
-        // Store references for cleanup
         this.leaderboardElements = [];
+        this.lbTab = 'local'; // 'local' or 'online'
 
         // Dark overlay
         const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.85);
         overlay.setDepth(2000);
         this.leaderboardElements.push(overlay);
 
-        // Leaderboard panel with retro border
-        const panel = this.add.rectangle(width / 2, height / 2, 400, 420, 0x0a0a1a);
+        // Panel
+        const panel = this.add.rectangle(width / 2, height / 2, 420, 450, 0x0a0a1a);
         panel.setDepth(2001);
         panel.setStrokeStyle(3, 0x00ffff);
         this.leaderboardElements.push(panel);
 
-        // Double border effect
-        const outerPanel = this.add.rectangle(width / 2, height / 2, 416, 436);
-        outerPanel.setDepth(2000);
-        outerPanel.setStrokeStyle(2, 0x004466);
-        this.leaderboardElements.push(outerPanel);
-
-        // Title with glow
-        const title = this.add.text(width / 2, height / 2 - 170, 'HIGH SCORES', {
-            fontSize: '32px',
-            fontFamily: 'monospace',
-            color: '#00ffff',
-            stroke: '#004466',
-            strokeThickness: 2
-        });
-        title.setOrigin(0.5);
-        title.setDepth(2002);
+        // Title
+        const title = this.add.text(width / 2, height / 2 - 190, 'HIGH SCORES', {
+            fontSize: '28px', fontFamily: 'monospace', color: '#00ffff',
+            stroke: '#004466', strokeThickness: 2
+        }).setOrigin(0.5).setDepth(2002);
         this.leaderboardElements.push(title);
 
-        // Decorative line
-        const line = this.add.rectangle(width / 2, height / 2 - 135, 300, 2, 0x00ffff);
-        line.setDepth(2002);
-        this.leaderboardElements.push(line);
+        // Tab buttons
+        const localTab = this.add.rectangle(width / 2 - 65, height / 2 - 155, 110, 28, 0x223344);
+        localTab.setStrokeStyle(1, 0x00ffff).setInteractive({ useHandCursor: true }).setDepth(2002);
+        this.leaderboardElements.push(localTab);
+        const localTabText = this.add.text(width / 2 - 65, height / 2 - 155, 'LOCAL', {
+            fontSize: '13px', fontFamily: 'monospace', color: '#00ffff'
+        }).setOrigin(0.5).setDepth(2003);
+        this.leaderboardElements.push(localTabText);
 
-        // Scores
-        let yOffset = -100;
-        if (scores.length === 0) {
-            const noScores = this.add.text(width / 2, height / 2, 'NO SCORES YET', {
-                fontSize: '18px',
-                fontFamily: 'monospace',
-                color: '#666666'
-            });
-            noScores.setOrigin(0.5);
-            noScores.setDepth(2002);
-            this.leaderboardElements.push(noScores);
-        } else {
-            scores.forEach((score, index) => {
-                const rankColor = index === 0 ? '#ffd700' : index === 1 ? '#c0c0c0' : index === 2 ? '#cd7f32' : '#ffffff';
+        const onlineTab = this.add.rectangle(width / 2 + 65, height / 2 - 155, 110, 28, 0x111122);
+        onlineTab.setStrokeStyle(1, 0x666688).setInteractive({ useHandCursor: true }).setDepth(2002);
+        this.leaderboardElements.push(onlineTab);
+        const onlineTabText = this.add.text(width / 2 + 65, height / 2 - 155, 'ONLINE', {
+            fontSize: '13px', fontFamily: 'monospace', color: '#666688'
+        }).setOrigin(0.5).setDepth(2003);
+        this.leaderboardElements.push(onlineTabText);
 
-                const rank = this.add.text(width / 2 - 150, height / 2 + yOffset, `${index + 1}.`, {
-                    fontSize: '20px',
-                    fontFamily: 'monospace',
-                    color: rankColor
+        // Score area container
+        this.lbScoreElements = [];
+
+        const showLocalScores = () => {
+            this.lbScoreElements.forEach(el => el.destroy());
+            this.lbScoreElements = [];
+            localTab.setFillStyle(0x223344);
+            localTabText.setColor('#00ffff');
+            onlineTab.setFillStyle(0x111122);
+            onlineTabText.setColor('#666688');
+
+            const scores = this.getLeaderboard();
+            let yOffset = -115;
+            if (scores.length === 0) {
+                const ns = this.add.text(width / 2, height / 2, 'NO SCORES YET', {
+                    fontSize: '18px', fontFamily: 'monospace', color: '#666666'
+                }).setOrigin(0.5).setDepth(2002);
+                this.lbScoreElements.push(ns);
+            } else {
+                scores.forEach((score, i) => {
+                    const c = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#ffffff';
+                    const r = this.add.text(width / 2 - 150, height / 2 + yOffset, `${i + 1}.`, {
+                        fontSize: '18px', fontFamily: 'monospace', color: c
+                    }).setOrigin(0, 0.5).setDepth(2002);
+                    const s = this.add.text(width / 2 + 100, height / 2 + yOffset, score.toLocaleString(), {
+                        fontSize: '18px', fontFamily: 'monospace', color: c
+                    }).setOrigin(1, 0.5).setDepth(2002);
+                    this.lbScoreElements.push(r, s);
+                    yOffset += 30;
                 });
-                rank.setOrigin(0, 0.5);
-                rank.setDepth(2002);
-                this.leaderboardElements.push(rank);
+            }
+        };
 
-                const scoreText = this.add.text(width / 2 + 100, height / 2 + yOffset, score.toLocaleString(), {
-                    fontSize: '20px',
-                    fontFamily: 'monospace',
-                    color: rankColor
+        const showOnlineScores = () => {
+            this.lbScoreElements.forEach(el => el.destroy());
+            this.lbScoreElements = [];
+            onlineTab.setFillStyle(0x223344);
+            onlineTabText.setColor('#00ffff');
+            localTab.setFillStyle(0x111122);
+            localTabText.setColor('#666688');
+
+            const loading = this.add.text(width / 2, height / 2 - 30, 'Loading...', {
+                fontSize: '16px', fontFamily: 'monospace', color: '#888888'
+            }).setOrigin(0.5).setDepth(2002);
+            this.lbScoreElements.push(loading);
+
+            fetch('/api/leaderboard', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'top', limit: 10 })
+            })
+            .then(r => r.json())
+            .then(data => {
+                // Clear loading
+                this.lbScoreElements.forEach(el => el.destroy());
+                this.lbScoreElements = [];
+
+                const entries = data.scores || [];
+                if (entries.length === 0) {
+                    const ns = this.add.text(width / 2, height / 2, 'NO ONLINE SCORES YET', {
+                        fontSize: '16px', fontFamily: 'monospace', color: '#666666'
+                    }).setOrigin(0.5).setDepth(2002);
+                    this.lbScoreElements.push(ns);
+                    return;
+                }
+
+                let yOff = -115;
+                const pilotName = localStorage.getItem('fortune-pilot-name') || 'Pilot';
+                entries.forEach((entry, i) => {
+                    const c = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#ffffff';
+                    const isYou = entry.name === pilotName;
+                    const r = this.add.text(width / 2 - 160, height / 2 + yOff, `${i + 1}.`, {
+                        fontSize: '16px', fontFamily: 'monospace', color: c
+                    }).setOrigin(0, 0.5).setDepth(2002);
+                    const n = this.add.text(width / 2 - 130, height / 2 + yOff, entry.name || '???', {
+                        fontSize: '16px', fontFamily: 'monospace', color: isYou ? '#00ff00' : c
+                    }).setOrigin(0, 0.5).setDepth(2002);
+                    const s = this.add.text(width / 2 + 130, height / 2 + yOff, Number(entry.score).toLocaleString(), {
+                        fontSize: '16px', fontFamily: 'monospace', color: c
+                    }).setOrigin(1, 0.5).setDepth(2002);
+                    this.lbScoreElements.push(r, n, s);
+                    yOff += 28;
                 });
-                scoreText.setOrigin(1, 0.5);
-                scoreText.setDepth(2002);
-                this.leaderboardElements.push(scoreText);
 
-                yOffset += 35;
+                // Show player rank
+                if (data.playerRank) {
+                    const rankText = this.add.text(width / 2, height / 2 + yOff + 10, `You are #${data.playerRank}!`, {
+                        fontSize: '16px', fontFamily: 'monospace', color: '#00ff00', fontStyle: 'bold'
+                    }).setOrigin(0.5).setDepth(2002);
+                    this.lbScoreElements.push(rankText);
+                }
+            })
+            .catch(() => {
+                this.lbScoreElements.forEach(el => el.destroy());
+                this.lbScoreElements = [];
+                const err = this.add.text(width / 2, height / 2, 'Could not load online scores', {
+                    fontSize: '14px', fontFamily: 'monospace', color: '#ff4444'
+                }).setOrigin(0.5).setDepth(2002);
+                this.lbScoreElements.push(err);
             });
-        }
+        };
+
+        localTab.on('pointerdown', showLocalScores);
+        onlineTab.on('pointerdown', showOnlineScores);
+
+        // Show local by default
+        showLocalScores();
 
         // Close button
-        const closeButton = this.add.rectangle(width / 2, height / 2 + 170, 150, 45, 0x111122);
-        closeButton.setInteractive({ useHandCursor: true });
-        closeButton.setDepth(2002);
-        closeButton.setStrokeStyle(2, 0x00ffff);
+        const closeButton = this.add.rectangle(width / 2, height / 2 + 190, 150, 40, 0x111122);
+        closeButton.setInteractive({ useHandCursor: true }).setDepth(2002).setStrokeStyle(2, 0x00ffff);
         this.leaderboardElements.push(closeButton);
 
-        const closeText = this.add.text(width / 2, height / 2 + 170, 'CLOSE', {
-            fontSize: '18px',
-            fontFamily: 'monospace',
-            color: '#00ffff'
-        });
-        closeText.setOrigin(0.5);
-        closeText.setDepth(2003);
+        const closeText = this.add.text(width / 2, height / 2 + 190, 'CLOSE', {
+            fontSize: '18px', fontFamily: 'monospace', color: '#00ffff'
+        }).setOrigin(0.5).setDepth(2003);
         this.leaderboardElements.push(closeText);
 
-        closeButton.on('pointerover', () => {
-            closeButton.setFillStyle(0x223344);
-            this.playHoverSound();
-        });
-
-        closeButton.on('pointerout', () => {
-            closeButton.setFillStyle(0x111122);
-        });
-
+        closeButton.on('pointerover', () => { closeButton.setFillStyle(0x223344); this.playHoverSound(); });
+        closeButton.on('pointerout', () => closeButton.setFillStyle(0x111122));
         closeButton.on('pointerdown', () => {
             this.playClickSound();
+            this.lbScoreElements.forEach(el => el.destroy());
             this.leaderboardElements.forEach(el => el.destroy());
             this.leaderboardElements = [];
+            this.lbScoreElements = [];
         });
     }
 

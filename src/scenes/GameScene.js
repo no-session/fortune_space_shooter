@@ -20,7 +20,7 @@ import DailyChallenge from '../managers/DailyChallenge.js';
 import TouchControls from '../ui/TouchControls.js';
 import ScreenWipe from '../effects/ScreenWipe.js';
 import Pet from '../entities/Pet.js';
-import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS, WEAPON_TYPES, WEAPON_CONFIG, HAZARD_TYPES, HAZARD_CONFIG, DRONE_CONFIG, PET_TYPES, PET_CONFIG, ACHIEVEMENT_REWARDS, WEATHER_TYPES, WEATHER_CONFIG } from '../utils/constants.js';
+import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS, WEAPON_TYPES, WEAPON_CONFIG, WEAPON_UPGRADE_NAMES, HAZARD_TYPES, HAZARD_CONFIG, DRONE_CONFIG, PET_TYPES, PET_CONFIG, ACHIEVEMENT_REWARDS, WEATHER_TYPES, WEATHER_CONFIG, MINI_BOSS_CONFIG } from '../utils/constants.js';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -656,13 +656,30 @@ export default class GameScene extends Phaser.Scene {
         // --- Power-up indicators container ---
         this.powerUpIndicators = [];
 
-        // --- Weapon type display ---
-        this.weaponText = this.add.text(10, 128, 'BLASTER', {
+        // --- Weapon type display (with upgrade name) ---
+        const initWeaponName = this.getWeaponDisplayName();
+        this.weaponText = this.add.text(10, 128, initWeaponName, {
             fontSize: '14px',
             fontFamily: 'monospace',
             color: '#00ffff'
         });
         this.weaponText.setDepth(1000);
+
+        // --- Screenshot button ---
+        this.screenshotBtn = this.add.text(this.scale.width - 40, 10, '\uD83D\uDCF8', {
+            fontSize: '24px'
+        }).setInteractive({ useHandCursor: true }).setDepth(1002).setScrollFactor(0);
+        this.screenshotBtn.on('pointerdown', () => this.takeScreenshot());
+
+        // --- Sound toggle icon ---
+        const soundLvl = localStorage.getItem('fortune-sound-level') || 'HIGH';
+        this.soundIcon = this.add.text(this.scale.width - 40, 40, soundLvl === 'OFF' ? '\uD83D\uDD07' : '\uD83D\uDD0A', {
+            fontSize: '20px'
+        }).setInteractive({ useHandCursor: true }).setDepth(1002).setScrollFactor(0);
+        this.soundIcon.on('pointerdown', () => {
+            const level = this.soundManager.cycleSoundLevel();
+            this.soundIcon.setText(level === 'OFF' ? '\uD83D\uDD07' : '\uD83D\uDD0A');
+        });
 
         // --- Level display ---
         const lvl = this.xpManager ? this.xpManager.getLevel() : 1;
@@ -887,10 +904,11 @@ export default class GameScene extends Phaser.Scene {
             this.healthText.setText(`HP: ${this.player.health}/${this.player.maxHealth}`);
         }
 
-        // Update weapon display
+        // Update weapon display with upgrade name
         if (this.weaponText && this.player) {
+            const displayName = this.getWeaponDisplayName();
             const wConfig = WEAPON_CONFIG[this.player.currentWeapon];
-            this.weaponText.setText(`${wConfig.name} [Q]`);
+            this.weaponText.setText(`${displayName} [Q]`);
             this.weaponText.setColor(Phaser.Display.Color.IntegerToColor(wConfig.color).rgba);
         }
 
@@ -1448,10 +1466,19 @@ export default class GameScene extends Phaser.Scene {
             this.dropCollectible(enemy.x, enemy.y);
         }
 
-        // Drop power-up (difficulty-adjusted chance, separate from collectibles)
-        const adjustedDropChance = POWERUP_DROP_CHANCE * (this.difficulty ? this.difficulty.powerUpDropMultiplier : 1) * this.autoDifficultyDropMod;
-        if (Math.random() < adjustedDropChance) {
-            this.dropPowerUp(enemy.x, enemy.y);
+        // Mini-boss drops 3 power-ups
+        if (enemy.isMiniBoss) {
+            for (let i = 0; i < MINI_BOSS_CONFIG.powerUpDrops; i++) {
+                this.time.delayedCall(i * 200, () => {
+                    this.dropPowerUp(enemy.x + Phaser.Math.Between(-30, 30), enemy.y + Phaser.Math.Between(-20, 20));
+                });
+            }
+        } else {
+            // Drop power-up (difficulty-adjusted chance, separate from collectibles)
+            const adjustedDropChance = POWERUP_DROP_CHANCE * (this.difficulty ? this.difficulty.powerUpDropMultiplier : 1) * this.autoDifficultyDropMod;
+            if (Math.random() < adjustedDropChance) {
+                this.dropPowerUp(enemy.x, enemy.y);
+            }
         }
 
         // Track kills for milestones
@@ -2252,6 +2279,9 @@ export default class GameScene extends Phaser.Scene {
 
         this.gameOver = true;
 
+        // Auto-screenshot with stats visible
+        this.autoScreenshotGameOver();
+
         // Fade out before showing game over
         this.cameras.main.fadeOut(300, 0, 0, 0);
         this.cameras.main.once('camerafadeoutcomplete', () => {
@@ -2993,5 +3023,129 @@ export default class GameScene extends Phaser.Scene {
 
     _launchGameOver() {
         this.scene.launch('GameOverScene', this._gameOverData);
+    }
+
+    getWeaponDisplayName() {
+        if (!this.player) return 'Pea Shooter';
+        const weapon = this.player.currentWeapon;
+        const level = this.player.weaponLevel;
+        const names = WEAPON_UPGRADE_NAMES[weapon];
+        if (names) {
+            const maxLevel = Math.max(...Object.keys(names).map(Number));
+            return names[Math.min(level, maxLevel)] || names[maxLevel];
+        }
+        return WEAPON_CONFIG[weapon].name;
+    }
+
+    takeScreenshot() {
+        // Temporarily hide screenshot button
+        if (this.screenshotBtn) this.screenshotBtn.setVisible(false);
+        if (this.soundIcon) this.soundIcon.setVisible(false);
+
+        // Wait one frame for the UI to hide, then capture
+        this.time.delayedCall(50, () => {
+            const canvas = this.game.canvas;
+            const dataUrl = canvas.toDataURL('image/png');
+
+            // Restore UI
+            if (this.screenshotBtn) this.screenshotBtn.setVisible(true);
+            if (this.soundIcon) this.soundIcon.setVisible(true);
+
+            this.showScreenshotModal(dataUrl);
+        });
+    }
+
+    showScreenshotModal(dataUrl) {
+        const width = this.scale.width;
+        const height = this.scale.height;
+        const elements = [];
+
+        // Pause game while viewing screenshot
+        this.scene.pause();
+
+        // Dark overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 2000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        `;
+
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        img.style.cssText = 'max-width: 90%; max-height: 70%; border: 2px solid #00ffff; border-radius: 4px;';
+        overlay.appendChild(img);
+
+        const btnContainer = document.createElement('div');
+        btnContainer.style.cssText = 'margin-top: 16px; display: flex; gap: 16px;';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'SAVE';
+        saveBtn.style.cssText = `
+            padding: 10px 32px; font-family: monospace; font-size: 18px;
+            background: #00ff00; color: #000; border: none; cursor: pointer; border-radius: 4px;
+        `;
+        saveBtn.onclick = () => {
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = `fortune-screenshot-${Date.now()}.png`;
+            a.click();
+        };
+
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'CLOSE';
+        closeBtn.style.cssText = `
+            padding: 10px 32px; font-family: monospace; font-size: 18px;
+            background: #333; color: #fff; border: 1px solid #666; cursor: pointer; border-radius: 4px;
+        `;
+        closeBtn.onclick = () => {
+            overlay.remove();
+            this.scene.resume();
+        };
+
+        btnContainer.appendChild(saveBtn);
+        btnContainer.appendChild(closeBtn);
+        overlay.appendChild(btnContainer);
+        document.body.appendChild(overlay);
+    }
+
+    autoScreenshotGameOver() {
+        try {
+            const canvas = this.game.canvas;
+            const dataUrl = canvas.toDataURL('image/png');
+            // Store for GameOverScene to access
+            localStorage.setItem('fortune-last-screenshot', dataUrl);
+        } catch (e) {
+            // Ignore errors
+        }
+    }
+
+    spawnMiniBoss() {
+        const x = Phaser.Math.Between(100, this.scale.width - 100);
+        const y = -50;
+        const miniBoss = new Enemy(this, x, y, 'fighter');
+
+        // Override stats for mini-boss
+        miniBoss.health = MINI_BOSS_CONFIG.health;
+        miniBoss.maxHealth = MINI_BOSS_CONFIG.health;
+        miniBoss.speed = MINI_BOSS_CONFIG.speed;
+        miniBoss.points = MINI_BOSS_CONFIG.points;
+        miniBoss.setScale(MINI_BOSS_CONFIG.scale);
+        miniBoss.setTint(MINI_BOSS_CONFIG.tint);
+        miniBoss.isMiniBoss = true;
+        miniBoss.setVelocity(Phaser.Math.Between(-60, 60), 80);
+        miniBoss.setCollideWorldBounds(true);
+
+        this.enemies.add(miniBoss);
+
+        // Wave manager tracks it
+        this.waveManager.enemiesRemaining += 1;
+
+        // Show warning
+        this.effectManager.showScorePopup(
+            this.scale.width / 2, this.scale.height / 2 - 80,
+            'MINI-BOSS!',
+            { color: '#ffd700', size: '36px', prefix: '' }
+        );
     }
 }

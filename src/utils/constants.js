@@ -338,6 +338,36 @@ export const WEAPON_CONFIG = {
     }
 };
 
+// Weapon upgrade path names (displayed in HUD and shop)
+export const WEAPON_UPGRADE_NAMES = {
+    [WEAPON_TYPES.BLASTER]: {
+        1: 'Pea Shooter',
+        2: 'Twin Blasters',
+        3: 'Triple Threat',
+        4: 'Quad Cannon'
+    },
+    [WEAPON_TYPES.LASER]: {
+        1: 'Flashlight',
+        2: 'Focus Beam',
+        3: 'Death Ray'
+    },
+    [WEAPON_TYPES.WAVE]: {
+        1: 'Ripple',
+        2: 'Tsunami',
+        3: 'Shockwave'
+    }
+};
+
+// Mini-boss configuration
+export const MINI_BOSS_CONFIG = {
+    health: 150,
+    speed: 130,
+    points: 500,
+    scale: 1.5,
+    tint: 0xffd700,
+    powerUpDrops: 3
+};
+
 // Environmental Hazards
 export const HAZARD_TYPES = {
     ASTEROID: 'asteroid',

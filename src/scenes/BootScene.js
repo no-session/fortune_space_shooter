@@ -238,8 +238,8 @@ export default class BootScene extends Phaser.Scene {
         // Create additional placeholder graphics
         this.createPlaceholderGraphics();
         
-        // Start menu scene
-        this.scene.start('MenuScene');
+        // Start intro scene (routes to menu if not first play)
+        this.scene.start('IntroScene');
     }
 
     createAnimations() {

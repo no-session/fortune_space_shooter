@@ -87,6 +87,20 @@ export default class PauseScene extends Phaser.Scene {
             this.scene.start('MenuScene');
         });
 
+        // Sound toggle
+        const soundLevel = localStorage.getItem('fortune-sound-level') || 'HIGH';
+        const soundLabels = { HIGH: 'SOUND: ON', LOW: 'SOUND: LOW', OFF: 'SOUND: OFF' };
+        this.soundBtnLabel = soundLabels[soundLevel] || 'SOUND: ON';
+        this.createButton(width / 2, buttonStartY + 210, this.soundBtnLabel, 0x44aa44, () => {
+            const gameScene = this.scene.get('GameScene');
+            if (gameScene && gameScene.soundManager) {
+                const level = gameScene.soundManager.cycleSoundLevel();
+                const labels = { HIGH: 'SOUND: ON', LOW: 'SOUND: LOW', OFF: 'SOUND: OFF' };
+                // Rebuild pause scene to reflect change
+                this.scene.restart();
+            }
+        });
+
         // ESC key to resume
         this.escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
         this.escKey.on('down', () => {
