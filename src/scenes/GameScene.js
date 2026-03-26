@@ -45,6 +45,11 @@ export default class GameScene extends Phaser.Scene {
         // UI
         this.createUI();
         
+        // Ensure chat box polling is active if Ridhaan is playing
+        if (window.chatBox) {
+            window.chatBox.startPolling();
+        }
+
         // Initialize particle emitter for effects
         this.particleEmitter = null;
         

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import ChatBox from '../ui/ChatBox.js';
 
 export default class MenuScene extends Phaser.Scene {
     constructor() {
@@ -821,6 +822,11 @@ export default class MenuScene extends Phaser.Scene {
                 });
                 msg.setOrigin(0.5);
                 msg.setDepth(2001);
+
+                // Create chat box for Ridhaan
+                if (!window.chatBox) {
+                    window.chatBox = new ChatBox();
+                }
 
                 // Start game after showing message
                 this.time.delayedCall(3000, () => {
