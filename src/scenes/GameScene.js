@@ -10,8 +10,9 @@ import ScoreManager from '../managers/ScoreManager.js';
 import SoundManager from '../managers/SoundManager.js';
 import StreakManager from '../managers/StreakManager.js';
 import EffectManager from '../managers/EffectManager.js';
+import RandomEventManager from '../managers/RandomEventManager.js';
 import BonusSystem from '../systems/BonusSystem.js';
-import { COLLECTIBLE_TYPES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES } from '../utils/constants.js';
+import { COLLECTIBLE_TYPES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS } from '../utils/constants.js';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -19,9 +20,13 @@ export default class GameScene extends Phaser.Scene {
     }
 
     create() {
+        // Load difficulty settings
+        const difficultyKey = localStorage.getItem('fortune-difficulty') || 'NORMAL';
+        this.difficulty = DIFFICULTY_MODES[difficultyKey] || DIFFICULTY_MODES.NORMAL;
+
         // Create starfield background
         this.createStarfield();
-        
+
         // Initialize managers
         this.formationManager = new FormationManager(this);
         this.waveManager = new WaveManager(this);
@@ -30,10 +35,16 @@ export default class GameScene extends Phaser.Scene {
         this.streakManager = new StreakManager(this);
         this.effectManager = new EffectManager(this);
         this.bonusSystem = new BonusSystem(this);
-        
+
         // Create player
         this.player = new Player(this, this.scale.width / 2, this.scale.height - 50);
-        
+
+        // Apply difficulty to player health
+        if (this.difficulty.healthMultiplier !== 1) {
+            this.player.maxHealth = Math.floor(GAME_CONFIG.PLAYER_HEALTH * this.difficulty.healthMultiplier);
+            this.player.health = this.player.maxHealth;
+        }
+
         // Create groups
         this.enemies = this.physics.add.group();
         this.enemyBullets = this.physics.add.group();
@@ -47,13 +58,16 @@ export default class GameScene extends Phaser.Scene {
 
         // Active power-up timers for UI
         this.activePowerUpTimers = [];
-        
+
+        // Combo announcement tracking
+        this.lastComboAnnouncement = 0;
+
         // Collision detection
         this.setupCollisions();
-        
+
         // UI
         this.createUI();
-        
+
         // Ensure chat box polling is active if Ridhaan is playing
         if (window.chatBox) {
             window.chatBox.startPolling();
@@ -61,22 +75,63 @@ export default class GameScene extends Phaser.Scene {
 
         // Initialize particle emitter for effects
         this.particleEmitter = null;
-        
-        // Start first wave
+
+        // Random event manager
+        this.randomEventManager = new RandomEventManager(this);
+
+        // Start first wave with wave name
         this.waveManager.startWave(1);
         this.bonusSystem.startWave(1);
-        
+        this.showWaveNameDisplay(1);
+
         // Pause key
         this.pauseKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
         this.pauseKey.on('down', () => {
             this.scene.pause();
             this.scene.launch('PauseScene');
         });
-        
+
         // Game state
         this.gameOver = false;
         this.paused = false;
         this.waveTransitioning = false;
+
+        // Unlock skins based on best score
+        this.checkSkinUnlocks();
+    }
+
+    checkSkinUnlocks() {
+        const scores = JSON.parse(localStorage.getItem('fortune_leaderboard') || '[]');
+        const best = scores.length > 0 ? Math.max(...scores) : 0;
+        const unlocked = JSON.parse(localStorage.getItem('fortune-unlocked-skins') || '["default"]');
+        let changed = false;
+        Object.keys(SHIP_SKINS).forEach(id => {
+            if (!unlocked.includes(id) && best >= SHIP_SKINS[id].unlockScore) {
+                unlocked.push(id);
+                changed = true;
+            }
+        });
+        if (changed) {
+            localStorage.setItem('fortune-unlocked-skins', JSON.stringify(unlocked));
+        }
+    }
+
+    showWaveNameDisplay(waveNumber) {
+        const isBoss = waveNumber % 5 === 0 && waveNumber > 0;
+        let waveName;
+
+        if (isBoss) {
+            // Use boss name
+            const bossIndex = Math.floor((waveNumber / 5) - 1) % 5;
+            const bossNames = ['Mothership', 'Dreadnought', 'Battlecruiser', 'Destroyer', 'Overlord'];
+            waveName = `BOSS: ${bossNames[bossIndex]}`;
+        } else if (WAVE_NAMES[waveNumber]) {
+            waveName = WAVE_NAMES[waveNumber];
+        } else {
+            waveName = WAVE_NAMES.RANDOM_POOL[Math.floor(Math.random() * WAVE_NAMES.RANDOM_POOL.length)];
+        }
+
+        this.effectManager.showWaveName(waveNumber, waveName, isBoss);
     }
 
     createStarfield() {
@@ -477,6 +532,21 @@ export default class GameScene extends Phaser.Scene {
         this.scoreManager.updateCombo();
         this.streakManager.update(this.game.loop.delta);
 
+        // Combo announcements
+        const currentCombo = this.scoreManager.getCombo();
+        if (currentCombo > 0 && currentCombo !== this.lastComboAnnouncement) {
+            for (let i = COMBO_ANNOUNCEMENTS.length - 1; i >= 0; i--) {
+                if (currentCombo === COMBO_ANNOUNCEMENTS[i].combo) {
+                    this.effectManager.showComboAnnouncement(currentCombo);
+                    this.lastComboAnnouncement = currentCombo;
+                    break;
+                }
+            }
+        }
+        if (currentCombo === 0) {
+            this.lastComboAnnouncement = 0;
+        }
+
         // Graze detection for enemy bullets
         if (this.player && this.player.active && !this.player.invincible) {
             this.enemyBullets.children.entries.forEach(bullet => {
@@ -650,8 +720,9 @@ export default class GameScene extends Phaser.Scene {
         // Record kill for streak system
         const streakData = this.streakManager.recordKill(enemy.type, time);
 
-        // Calculate and add score with streak multiplier
-        const finalPoints = this.scoreManager.addKillScore(enemy.points, streakData.multiplier);
+        // Calculate and add score with streak multiplier + double points event
+        const eventMultiplier = this.randomEventManager ? this.randomEventManager.getPointsMultiplier() : 1;
+        const finalPoints = this.scoreManager.addKillScore(enemy.points * eventMultiplier, streakData.multiplier);
 
         // Show score popup with streak info
         this.effectManager.showScorePopup(enemy.x, enemy.y, finalPoints, {
@@ -674,8 +745,9 @@ export default class GameScene extends Phaser.Scene {
             this.dropCollectible(enemy.x, enemy.y);
         }
 
-        // Drop power-up (~10% chance, separate from collectibles)
-        if (Math.random() < POWERUP_DROP_CHANCE) {
+        // Drop power-up (difficulty-adjusted chance, separate from collectibles)
+        const adjustedDropChance = POWERUP_DROP_CHANCE * (this.difficulty ? this.difficulty.powerUpDropMultiplier : 1);
+        if (Math.random() < adjustedDropChance) {
             this.dropPowerUp(enemy.x, enemy.y);
         }
 
@@ -795,6 +867,7 @@ export default class GameScene extends Phaser.Scene {
                     // Start the next wave first to prevent re-triggering
                     this.waveManager.startWave(currentWave + 1);
                     this.bonusSystem.startWave(currentWave + 1);
+                    this.showWaveNameDisplay(currentWave + 1);
                     this.waveTransitioning = false;
 
                     // Then launch shop
@@ -807,6 +880,7 @@ export default class GameScene extends Phaser.Scene {
                     // Start next wave
                     this.waveManager.startWave(currentWave + 1);
                     this.bonusSystem.startWave(currentWave + 1);
+                    this.showWaveNameDisplay(currentWave + 1);
                     this.waveTransitioning = false;
                 }
             }
@@ -815,13 +889,22 @@ export default class GameScene extends Phaser.Scene {
 
     onBossDefeated(scoreValue = 5000) {
         this.waveManager.onBossKilled();
-        this.scoreManager.addScore(scoreValue); // Boss-specific score bonus
+        this.scoreManager.addScore(scoreValue);
 
-        // Big explosion effect
+        // EPIC boss death: slow motion
+        this.time.timeScale = 0.5;
+        this.effectManager.screenFlash(0xffffff, 300);
+
+        // Multiple explosions
         this.createBossExplosion();
 
         // Screen shake
-        this.cameras.main.shake(800, 0.02);
+        this.cameras.main.shake(1000, 0.03);
+
+        // Return to normal after 2s real time (adjusted for 0.5x scale)
+        this.time.delayedCall(1000, () => {
+            this.time.timeScale = 1;
+        });
     }
 
     createBossExplosion() {
@@ -915,18 +998,34 @@ export default class GameScene extends Phaser.Scene {
     }
 
     executeScreenNuke() {
-        // White flash
-        this.effectManager.screenFlash(0xffffff, 300);
-        this.effectManager.screenShake(EFFECT_CONFIG.SHAKE_LARGE);
+        // EPIC slow motion nuke
+        this.effectManager.screenFlash(0xffffff, 400);
+        this.effectManager.screenShake({ duration: 800, intensity: 0.025 });
 
-        // Kill all enemies on screen
+        // Slow time to 0.3x
+        this.time.timeScale = 0.3;
+
+        // Camera zoom in slightly
+        this.cameras.main.zoomTo(1.05, 300);
+
+        // Kill enemies in staggered sequence
         const enemiesToKill = this.enemies.children.entries.slice();
-        for (let i = enemiesToKill.length - 1; i >= 0; i--) {
-            const enemy = enemiesToKill[i];
+        enemiesToKill.forEach((enemy, index) => {
             if (enemy && enemy.active) {
-                enemy.die();
+                this.time.delayedCall(index * 50, () => {
+                    if (enemy && enemy.active) {
+                        enemy.die();
+                    }
+                });
             }
-        }
+        });
+
+        // Return time to normal after 1.5 real seconds (adjusted for timeScale)
+        this.time.delayedCall(500, () => {
+            // 500 * 0.3 ≈ 1.5s real
+            this.time.timeScale = 1;
+            this.cameras.main.zoomTo(1, 300);
+        });
     }
 
     addPowerUpTimer(label, duration, color) {

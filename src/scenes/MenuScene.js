@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import ChatBox from '../ui/ChatBox.js';
+import { SHIP_SKINS, DIFFICULTY_MODES } from '../utils/constants.js';
 
 export default class MenuScene extends Phaser.Scene {
     constructor() {
@@ -252,7 +253,11 @@ export default class MenuScene extends Phaser.Scene {
     }
 
     createButtons(width, height) {
-        const buttonY = height / 2 + 80;
+        const buttonY = height / 2 + 50;
+
+        // Difficulty selector
+        this.selectedDifficulty = localStorage.getItem('fortune-difficulty') || 'NORMAL';
+        this.createDifficultySelector(width, buttonY - 70);
 
         // Start button with retro border
         this.createRetroButton(
@@ -280,17 +285,26 @@ export default class MenuScene extends Phaser.Scene {
             }
         );
 
+        // Skins button
+        this.createRetroButton(
+            width / 2 - 120,
+            buttonY + 60,
+            'SKINS',
+            0xffd700,
+            () => this.showSkinsOverlay()
+        );
+
         // Leaderboard button
         this.createRetroButton(
-            width / 2,
-            buttonY + 70,
-            'LEADERBOARD',
+            width / 2 + 120,
+            buttonY + 60,
+            'SCORES',
             0x666688,
             () => this.showLeaderboard()
         );
 
         // Blinking "INSERT COIN" text
-        const insertCoin = this.add.text(width / 2, buttonY - 50, '[ PRESS START ]', {
+        const insertCoin = this.add.text(width / 2, buttonY - 30, '[ PRESS START ]', {
             fontSize: '16px',
             fontFamily: 'monospace',
             color: '#00ff00'
@@ -305,6 +319,240 @@ export default class MenuScene extends Phaser.Scene {
             yoyo: true,
             repeat: -1
         });
+    }
+
+    createDifficultySelector(width, y) {
+        const modes = ['EASY', 'NORMAL', 'HARD'];
+        this.difficultyButtons = [];
+
+        modes.forEach((mode, i) => {
+            const config = DIFFICULTY_MODES[mode];
+            const x = width / 2 + (i - 1) * 110;
+            const isSelected = mode === this.selectedDifficulty;
+
+            const bg = this.add.rectangle(x, y, 95, 30, isSelected ? 0x223344 : 0x111122);
+            bg.setStrokeStyle(2, isSelected ? 0xffffff : config.color);
+            bg.setInteractive({ useHandCursor: true });
+            bg.setDepth(10);
+
+            const label = this.add.text(x, y, config.name, {
+                fontSize: '14px',
+                fontFamily: 'monospace',
+                color: isSelected ? '#ffffff' : Phaser.Display.Color.IntegerToColor(config.color).rgba
+            });
+            label.setOrigin(0.5);
+            label.setDepth(11);
+
+            bg.on('pointerover', () => {
+                bg.setFillStyle(0x334455);
+                this.playHoverSound();
+            });
+            bg.on('pointerout', () => {
+                bg.setFillStyle(mode === this.selectedDifficulty ? 0x223344 : 0x111122);
+            });
+            bg.on('pointerdown', () => {
+                this.playClickSound();
+                this.selectedDifficulty = mode;
+                localStorage.setItem('fortune-difficulty', mode);
+                // Update visuals
+                this.difficultyButtons.forEach(btn => {
+                    const sel = btn.mode === mode;
+                    btn.bg.setStrokeStyle(2, sel ? 0xffffff : DIFFICULTY_MODES[btn.mode].color);
+                    btn.bg.setFillStyle(sel ? 0x223344 : 0x111122);
+                    btn.label.setColor(sel ? '#ffffff' : Phaser.Display.Color.IntegerToColor(DIFFICULTY_MODES[btn.mode].color).rgba);
+                });
+            });
+
+            this.difficultyButtons.push({ bg, label, mode });
+        });
+    }
+
+    showSkinsOverlay() {
+        const width = this.scale.width;
+        const height = this.scale.height;
+        const elements = [];
+
+        // Get unlocked skins and best score
+        const unlockedSkins = JSON.parse(localStorage.getItem('fortune-unlocked-skins') || '["default"]');
+        const bestScore = this.getBestScore();
+        const selectedSkin = localStorage.getItem('fortune-selected-skin') || 'default';
+
+        // Check for newly unlockable skins
+        const skinIds = Object.keys(SHIP_SKINS);
+        skinIds.forEach(id => {
+            if (!unlockedSkins.includes(id) && bestScore >= SHIP_SKINS[id].unlockScore) {
+                unlockedSkins.push(id);
+            }
+        });
+        localStorage.setItem('fortune-unlocked-skins', JSON.stringify(unlockedSkins));
+
+        // Dark overlay
+        const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.85);
+        overlay.setDepth(2000);
+        elements.push(overlay);
+
+        // Panel
+        const panel = this.add.rectangle(width / 2, height / 2, 500, 380, 0x0a0a1a);
+        panel.setDepth(2001);
+        panel.setStrokeStyle(3, 0xffd700);
+        elements.push(panel);
+
+        // Title
+        const title = this.add.text(width / 2, height / 2 - 160, 'SHIP SKINS', {
+            fontSize: '28px',
+            fontFamily: 'monospace',
+            color: '#ffd700',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        title.setOrigin(0.5);
+        title.setDepth(2002);
+        elements.push(title);
+
+        // Show skins in a row
+        const startX = width / 2 - 160;
+        const skinY = height / 2 - 40;
+
+        skinIds.forEach((id, i) => {
+            const skin = SHIP_SKINS[id];
+            const x = startX + i * 110;
+            const isUnlocked = unlockedSkins.includes(id);
+            const isSelected = id === selectedSkin;
+
+            // Card bg
+            const cardColor = isSelected ? 0x334455 : 0x1a1a2e;
+            const card = this.add.rectangle(x, skinY, 90, 120, cardColor);
+            card.setStrokeStyle(2, isSelected ? 0xffd700 : (isUnlocked ? 0x444466 : 0x333333));
+            card.setDepth(2002);
+            elements.push(card);
+
+            // Glow for selected
+            if (isSelected) {
+                const glow = this.add.rectangle(x, skinY, 96, 126);
+                glow.setStrokeStyle(3, 0xffd700);
+                glow.setDepth(2001);
+                elements.push(glow);
+                this.tweens.add({
+                    targets: glow,
+                    alpha: { from: 1, to: 0.3 },
+                    duration: 800,
+                    yoyo: true,
+                    repeat: -1
+                });
+            }
+
+            // Ship icon
+            const ship = this.add.image(x, skinY - 25, 'player_m');
+            ship.setScale(1.5);
+            ship.setDepth(2003);
+            elements.push(ship);
+
+            if (isUnlocked) {
+                if (skin.tint && skin.tint !== 'rainbow') {
+                    ship.setTint(skin.tint);
+                } else if (skin.tint === 'rainbow') {
+                    let ci = 0;
+                    const rt = this.time.addEvent({
+                        delay: 300,
+                        callback: () => { ship.setTint(skin.colors[ci]); ci = (ci + 1) % skin.colors.length; },
+                        loop: true
+                    });
+                    elements.push({ destroy: () => rt.destroy() });
+                }
+            } else {
+                ship.setTint(0x333333);
+                // Lock icon
+                const lock = this.add.text(x, skinY - 25, '🔒', { fontSize: '20px' });
+                lock.setOrigin(0.5);
+                lock.setDepth(2004);
+                elements.push(lock);
+            }
+
+            // Name
+            const nameText = this.add.text(x, skinY + 20, skin.name, {
+                fontSize: '10px',
+                fontFamily: 'monospace',
+                color: isUnlocked ? '#ffffff' : '#666666',
+                align: 'center',
+                wordWrap: { width: 85 }
+            });
+            nameText.setOrigin(0.5);
+            nameText.setDepth(2003);
+            elements.push(nameText);
+
+            // Requirement or SELECTED label
+            let infoStr = '';
+            if (!isUnlocked) {
+                infoStr = `${skin.unlockScore.toLocaleString()} pts`;
+            } else if (isSelected) {
+                infoStr = 'EQUIPPED';
+            }
+            const info = this.add.text(x, skinY + 40, infoStr, {
+                fontSize: '10px',
+                fontFamily: 'monospace',
+                color: isSelected ? '#ffd700' : '#888888'
+            });
+            info.setOrigin(0.5);
+            info.setDepth(2003);
+            elements.push(info);
+
+            // Click to select
+            if (isUnlocked && !isSelected) {
+                card.setInteractive({ useHandCursor: true });
+                card.on('pointerdown', () => {
+                    this.playClickSound();
+                    localStorage.setItem('fortune-selected-skin', id);
+                    // Refresh overlay
+                    elements.forEach(el => { if (el && el.destroy) el.destroy(); });
+                    this.showSkinsOverlay();
+                });
+                card.on('pointerover', () => {
+                    card.setFillStyle(0x334455);
+                    this.playHoverSound();
+                });
+                card.on('pointerout', () => {
+                    card.setFillStyle(0x1a1a2e);
+                });
+            }
+        });
+
+        // Best score info
+        const scoreInfo = this.add.text(width / 2, height / 2 + 90, `Your Best Score: ${bestScore.toLocaleString()}`, {
+            fontSize: '14px',
+            fontFamily: 'monospace',
+            color: '#888888'
+        });
+        scoreInfo.setOrigin(0.5);
+        scoreInfo.setDepth(2002);
+        elements.push(scoreInfo);
+
+        // Close button
+        const closeBtn = this.add.rectangle(width / 2, height / 2 + 140, 120, 40, 0x111122);
+        closeBtn.setInteractive({ useHandCursor: true });
+        closeBtn.setDepth(2002);
+        closeBtn.setStrokeStyle(2, 0xffd700);
+        elements.push(closeBtn);
+
+        const closeText = this.add.text(width / 2, height / 2 + 140, 'CLOSE', {
+            fontSize: '16px',
+            fontFamily: 'monospace',
+            color: '#ffd700'
+        });
+        closeText.setOrigin(0.5);
+        closeText.setDepth(2003);
+        elements.push(closeText);
+
+        closeBtn.on('pointerover', () => { closeBtn.setFillStyle(0x223344); this.playHoverSound(); });
+        closeBtn.on('pointerout', () => { closeBtn.setFillStyle(0x111122); });
+        closeBtn.on('pointerdown', () => {
+            this.playClickSound();
+            elements.forEach(el => { if (el && el.destroy) el.destroy(); });
+        });
+    }
+
+    getBestScore() {
+        const scores = JSON.parse(localStorage.getItem('fortune_leaderboard') || '[]');
+        return scores.length > 0 ? Math.max(...scores) : 0;
     }
 
     createRetroButton(x, y, text, color, callback) {

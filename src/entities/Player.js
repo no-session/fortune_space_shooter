@@ -1,16 +1,25 @@
 import Phaser from 'phaser';
-import { GAME_CONFIG } from '../utils/constants.js';
+import { GAME_CONFIG, SHIP_SKINS } from '../utils/constants.js';
 
 export default class Player extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y) {
         super(scene, x, y, 'player_m');
-        
+
         scene.add.existing(this);
         scene.physics.add.existing(this);
-        
+
         this.setCollideWorldBounds(true);
         this.setScale(0.8);
         this.setDepth(100);
+
+        // Apply selected skin
+        this.skinId = localStorage.getItem('fortune-selected-skin') || 'default';
+        this.rainbowTween = null;
+        this.applySkin();
+
+        // Trail effect
+        this.trailSprites = [];
+        this.trailFrameCount = 0;
         
         // Player stats
         this.health = GAME_CONFIG.PLAYER_HEALTH;
@@ -67,6 +76,92 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
             }
             return originalSetActive(value);
         };
+    }
+
+    applySkin() {
+        const skin = SHIP_SKINS[this.skinId];
+        if (!skin) return;
+
+        // Stop any existing rainbow tween
+        if (this.rainbowTween) {
+            this.rainbowTween.destroy();
+            this.rainbowTween = null;
+        }
+
+        if (skin.tint === 'rainbow') {
+            // Cycle through rainbow colors
+            let colorIndex = 0;
+            this.rainbowTween = this.scene.time.addEvent({
+                delay: 500,
+                callback: () => {
+                    if (this.active) {
+                        this.setTint(skin.colors[colorIndex]);
+                        colorIndex = (colorIndex + 1) % skin.colors.length;
+                    }
+                },
+                loop: true
+            });
+        } else if (skin.tint) {
+            this.setTint(skin.tint);
+        } else {
+            this.clearTint();
+        }
+    }
+
+    updateTrail() {
+        this.trailFrameCount++;
+        if (this.trailFrameCount % 3 !== 0) return;
+        if (!this.body) return;
+
+        const speed = Math.abs(this.body.velocity.x) + Math.abs(this.body.velocity.y);
+        if (speed < 50) return;
+
+        // Create trail sprite
+        const trail = this.scene.add.image(this.x, this.y, this.currentFrame);
+        trail.setScale(this.scaleX);
+        trail.setDepth(99);
+        trail.setAlpha(0.4);
+
+        // Tint based on power-up state
+        if (this.rapidFire) {
+            trail.setTint(0xff4444);
+        } else if (this.magnetActive) {
+            trail.setTint(0xffd700);
+        } else {
+            const skin = SHIP_SKINS[this.skinId];
+            if (skin && skin.tint && skin.tint !== 'rainbow') {
+                trail.setTint(skin.tint);
+            }
+        }
+
+        this.trailSprites.push(trail);
+
+        // Fade out
+        this.scene.tweens.add({
+            targets: trail,
+            alpha: 0,
+            duration: 200,
+            onComplete: () => {
+                trail.destroy();
+                const idx = this.trailSprites.indexOf(trail);
+                if (idx >= 0) this.trailSprites.splice(idx, 1);
+            }
+        });
+
+        // Limit max trail sprites
+        while (this.trailSprites.length > 8) {
+            const old = this.trailSprites.shift();
+            if (old) old.destroy();
+        }
+    }
+
+    restoreSkinTint() {
+        const skin = SHIP_SKINS[this.skinId];
+        if (!skin || !skin.tint || skin.tint === 'rainbow') {
+            this.clearTint();
+        } else {
+            this.setTint(skin.tint);
+        }
     }
 
     createExhaust() {
@@ -167,7 +262,10 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         
         // Update banking animation based on horizontal movement
         this.updateBankingAnimation(velocityX);
-        
+
+        // Trail effect
+        this.updateTrail();
+
         // Update exhaust position
         if (this.exhaust) {
             this.exhaust.setPosition(this.x, this.y + 35);
@@ -294,7 +392,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         // Flash effect (but don't affect alpha during blink animation)
         this.setTint(0xff0000);
         this.scene.time.delayedCall(100, () => {
-            this.clearTint();
+            // Restore skin tint instead of clearing
+            this.restoreSkinTint();
         });
 
         // Screen shake
@@ -527,6 +626,13 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         if (this.blinkTween && this.blinkTween.isPlaying()) {
             this.blinkTween.stop();
         }
+        if (this.rainbowTween) {
+            this.rainbowTween.destroy();
+            this.rainbowTween = null;
+        }
+        // Clean up trail sprites
+        this.trailSprites.forEach(t => { if (t) t.destroy(); });
+        this.trailSprites = [];
 
         if (this.exhaust) {
             this.exhaust.destroy();

@@ -195,6 +195,112 @@ export const KILL_MILESTONES = [
     { kills: 500, text: '👑 LEGEND!', color: '#ffd700', confetti: true }
 ];
 
+// Ship Skins
+export const SHIP_SKINS = {
+    default: {
+        name: 'Blue Wing',
+        tint: null, // no tint, use default texture
+        unlockScore: 0,
+        description: 'Standard issue fighter'
+    },
+    red_fury: {
+        name: 'Red Fury',
+        tint: 0xff4444,
+        unlockScore: 1000,
+        description: 'Unlocks at 1,000 score'
+    },
+    golden: {
+        name: 'Golden Eagle',
+        tint: 0xffd700,
+        unlockScore: 5000,
+        description: 'Unlocks at 5,000 score'
+    },
+    rainbow: {
+        name: 'Rainbow Rider',
+        tint: 'rainbow', // special case: cycles colors
+        unlockScore: 10000,
+        description: 'Unlocks at 10,000 score',
+        colors: [0xff0000, 0xff8800, 0xffff00, 0x00ff00, 0x0088ff, 0x8800ff, 0xff00ff]
+    }
+};
+
+// Random Events
+export const RANDOM_EVENTS = {
+    MIN_INTERVAL: 60000,  // 60 seconds minimum
+    MAX_INTERVAL: 90000,  // 90 seconds maximum
+    TYPES: {
+        COIN_SHOWER: {
+            name: 'COIN SHOWER',
+            emoji: '🪙',
+            duration: 5000,
+            coinCount: 20
+        },
+        ENEMY_FREEZE: {
+            name: 'FREEZE',
+            emoji: '❄️',
+            duration: 4000
+        },
+        DOUBLE_POINTS: {
+            name: 'DOUBLE POINTS',
+            emoji: '2️⃣',
+            duration: 10000
+        },
+        MYSTERY_BOX: {
+            name: 'MYSTERY BOX',
+            emoji: '❓',
+            fallSpeed: 80
+        }
+    }
+};
+
+// Wave Names
+export const WAVE_NAMES = {
+    1: 'First Contact',
+    2: 'Scout Patrol',
+    3: 'Getting Serious',
+    4: 'Fighter Squadron',
+    // Wave 5+ boss waves use boss name
+    RANDOM_POOL: [
+        'Alien Ambush', 'Space Storm', 'Meteor Shower', 'Dark Fleet',
+        'Star Strike', 'Cosmic Chaos', 'Nova Blast', 'Galactic Fury',
+        'Supernova', 'Black Hole Battalion'
+    ]
+};
+
+// Difficulty Modes
+export const DIFFICULTY_MODES = {
+    EASY: {
+        name: 'EASY',
+        color: 0x00ff00,
+        healthMultiplier: 1.5,
+        enemyShootRateMultiplier: 0.7,
+        powerUpDropMultiplier: 2.0
+    },
+    NORMAL: {
+        name: 'NORMAL',
+        color: 0x00ffff,
+        healthMultiplier: 1.0,
+        enemyShootRateMultiplier: 1.0,
+        powerUpDropMultiplier: 1.0
+    },
+    HARD: {
+        name: 'HARD',
+        color: 0xff0000,
+        healthMultiplier: 0.7,
+        enemyShootRateMultiplier: 1.5,
+        powerUpDropMultiplier: 0.5
+    }
+};
+
+// Combo Announcements
+export const COMBO_ANNOUNCEMENTS = [
+    { combo: 5, text: 'NICE!', color: '#00ff00', size: '32px' },
+    { combo: 10, text: 'AWESOME!', color: '#0088ff', size: '36px' },
+    { combo: 15, text: 'INCREDIBLE!', color: '#aa00ff', size: '40px' },
+    { combo: 20, text: 'UNSTOPPABLE!', color: '#ff0000', size: '48px' },
+    { combo: 30, text: 'GOD MODE!', color: 'rainbow', size: '56px', shake: true }
+];
+
 // Boss Types
 export const BOSS_TYPES = {
     MOTHERSHIP: 'mothership',

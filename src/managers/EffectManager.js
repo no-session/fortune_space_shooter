@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { EFFECT_CONFIG, COLORS } from '../utils/constants.js';
+import { EFFECT_CONFIG, COLORS, COMBO_ANNOUNCEMENTS } from '../utils/constants.js';
 
 export default class EffectManager {
     constructor(scene) {
@@ -308,6 +308,151 @@ export default class EffectManager {
             const b = color & 0xff;
             this.scene.cameras.main.flash(duration, r, g, b);
         }
+    }
+
+    // Combo announcement (fighting game style)
+    showComboAnnouncement(comboLevel) {
+        // Find the highest matching announcement
+        let announcement = null;
+        for (let i = COMBO_ANNOUNCEMENTS.length - 1; i >= 0; i--) {
+            if (comboLevel >= COMBO_ANNOUNCEMENTS[i].combo) {
+                announcement = COMBO_ANNOUNCEMENTS[i];
+                break;
+            }
+        }
+        if (!announcement) return;
+
+        const centerX = this.scene.scale.width / 2;
+        const centerY = this.scene.scale.height / 2 - 80;
+
+        const isRainbow = announcement.color === 'rainbow';
+
+        const text = this.scene.add.text(centerX, centerY, announcement.text, {
+            fontSize: announcement.size,
+            fontFamily: 'monospace',
+            color: isRainbow ? '#ff0000' : announcement.color,
+            stroke: '#000000',
+            strokeThickness: 5,
+            fontStyle: 'bold'
+        });
+        text.setOrigin(0.5);
+        text.setDepth(EFFECT_CONFIG.DEPTH_STREAK_ANNOUNCEMENT + 10);
+        text.setAlpha(0);
+
+        // Rainbow color cycle
+        if (isRainbow) {
+            const colors = ['#ff0000', '#ff8800', '#ffff00', '#00ff00', '#0088ff', '#8800ff', '#ff00ff'];
+            let ci = 0;
+            const colorTimer = this.scene.time.addEvent({
+                delay: 100,
+                callback: () => {
+                    if (text && text.active) {
+                        text.setColor(colors[ci]);
+                        ci = (ci + 1) % colors.length;
+                    }
+                },
+                loop: true
+            });
+            // Store for cleanup
+            text._colorTimer = colorTimer;
+        }
+
+        // Dramatic entrance
+        this.scene.tweens.add({
+            targets: text,
+            alpha: 1,
+            scale: { from: 3, to: 1 },
+            duration: 300,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.scene.time.delayedCall(1000, () => {
+                    this.scene.tweens.add({
+                        targets: text,
+                        alpha: 0,
+                        y: centerY - 50,
+                        scale: 1.5,
+                        duration: 500,
+                        onComplete: () => {
+                            if (text._colorTimer) text._colorTimer.destroy();
+                            text.destroy();
+                        }
+                    });
+                });
+            }
+        });
+
+        if (announcement.shake) {
+            this.screenShake(EFFECT_CONFIG.SHAKE_LARGE);
+        } else {
+            this.screenShake(EFFECT_CONFIG.SHAKE_SMALL);
+        }
+    }
+
+    // Wave name display
+    showWaveName(waveNumber, waveName, isBoss = false) {
+        const centerX = this.scene.scale.width / 2;
+        const centerY = this.scene.scale.height / 2 - 30;
+
+        // Wave number
+        const waveLabel = this.scene.add.text(centerX, centerY - 30, `WAVE ${waveNumber}`, {
+            fontSize: '24px',
+            fontFamily: 'monospace',
+            color: isBoss ? '#ff0000' : '#00ffff',
+            stroke: '#000000',
+            strokeThickness: 4,
+            fontStyle: 'bold'
+        });
+        waveLabel.setOrigin(0.5);
+        waveLabel.setDepth(EFFECT_CONFIG.DEPTH_STREAK_ANNOUNCEMENT);
+        waveLabel.setAlpha(0);
+
+        // Wave name
+        const nameText = this.scene.add.text(centerX, centerY + 10, waveName, {
+            fontSize: isBoss ? '32px' : '28px',
+            fontFamily: 'monospace',
+            color: isBoss ? '#ff4444' : '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 4
+        });
+        nameText.setOrigin(0.5);
+        nameText.setDepth(EFFECT_CONFIG.DEPTH_STREAK_ANNOUNCEMENT);
+        nameText.setAlpha(0);
+
+        // Animate in
+        this.scene.tweens.add({
+            targets: [waveLabel, nameText],
+            alpha: 1,
+            duration: 400,
+            ease: 'Power2'
+        });
+
+        this.scene.tweens.add({
+            targets: waveLabel,
+            x: { from: centerX - 100, to: centerX },
+            duration: 400,
+            ease: 'Power2'
+        });
+
+        this.scene.tweens.add({
+            targets: nameText,
+            x: { from: centerX + 100, to: centerX },
+            duration: 400,
+            ease: 'Power2'
+        });
+
+        // Fade out after 2 seconds
+        this.scene.time.delayedCall(2000, () => {
+            this.scene.tweens.add({
+                targets: [waveLabel, nameText],
+                alpha: 0,
+                y: '-=30',
+                duration: 500,
+                onComplete: () => {
+                    waveLabel.destroy();
+                    nameText.destroy();
+                }
+            });
+        });
     }
 
     // Cleanup

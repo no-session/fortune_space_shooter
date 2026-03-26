@@ -37,7 +37,9 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         
         // Shooting (for fighters)
         if (this.stats.shoots) {
-            this.shootInterval = this.stats.shootInterval;
+            // Apply difficulty multiplier to shoot interval (higher multiplier = faster shooting = lower interval)
+            const diffMultiplier = scene.difficulty ? scene.difficulty.enemyShootRateMultiplier : 1;
+            this.shootInterval = Math.floor(this.stats.shootInterval / diffMultiplier);
             this.lastShot = 0;
             this.bullets = scene.physics.add.group();
         }
@@ -140,11 +142,16 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     takeDamage(amount) {
         this.health -= amount;
-        
+
         // Flash effect
         this.setTint(0xffffff);
         this.scene.time.delayedCall(50, () => {
-            this.clearTint();
+            // Restore freeze tint if frozen, otherwise clear
+            if (this.frozen) {
+                this.setTint(0x4488ff);
+            } else {
+                this.clearTint();
+            }
         });
         
         if (this.health <= 0) {
