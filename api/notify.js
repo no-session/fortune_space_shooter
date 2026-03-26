@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     // Ridhaan confirmed — return the personal message
     return res.status(200).json({
       ok: true,
-      message: "🌟 Hey Ridhaan! Dad sees you playing! Have fun and try to beat your high score! Love you champ! 💪🚀"
+      message: "🌟 Hi Tiger! Papa sees you playing! Have fun and try to beat your high score! Love you! 💪🚀 Message me in the chat box below. I will reply whenever I see your message!"
     });
   }
 
