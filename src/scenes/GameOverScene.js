@@ -72,8 +72,8 @@ export default class GameOverScene extends Phaser.Scene {
         const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
         // Stats to show, staggered animation
-        const statsStartY = 110;
-        const lineHeight = 32;
+        const statsStartY = 100;
+        const lineHeight = 28;
         const stats = [
             { label: 'Total Score', value: this.score.toLocaleString(), color: '#ffd700', size: '26px' },
             { label: 'Rating', value: stars, color: starColor, size: '22px' },

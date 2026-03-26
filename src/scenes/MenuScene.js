@@ -27,20 +27,14 @@ export default class MenuScene extends Phaser.Scene {
         // Create scanlines overlay for retro CRT effect
         this.createScanlines();
 
-        // Add decorative ships flying in background
-        this.createBackgroundShips();
-
-        // Add floating collectibles
+        // Add floating collectibles (subtle background decoration)
         this.createFloatingCollectibles();
 
-        // Create the main title with glow effect
+        // Create the main title
         this.createTitle(width, height);
 
-        // Create retro-styled buttons
+        // Create buttons
         this.createButtons(width, height);
-
-        // Create instructions with retro styling
-        this.createInstructions(width, height);
 
         // Add decorative player ship
         this.createHeroShip(width, height);
@@ -51,18 +45,15 @@ export default class MenuScene extends Phaser.Scene {
         // XP and level display
         this.createXPDisplay(width, height);
 
-        // Total stats on menu
-        this.createMenuStats(width, height);
+        // SOUND toggle + STORY button
+        this.createBottomButtons(width, height);
 
         // Credits at bottom
-        this.add.text(width / 2, height - 15, 'Made with \u2764\uFE0F by Ridhaan & Papa', {
-            fontSize: '12px',
+        this.add.text(width / 2, 570, 'Made with \u2764\uFE0F by Ridhaan & Papa', {
+            fontSize: '11px',
             fontFamily: 'monospace',
             color: '#555577'
-        }).setOrigin(0.5, 1).setDepth(100);
-
-        // Sparkle effects behind title
-        this.createTitleSparkles(width, height);
+        }).setOrigin(0.5).setDepth(100);
 
         // Konami Code easter egg listener
         this.setupKonamiCode();
@@ -72,13 +63,6 @@ export default class MenuScene extends Phaser.Scene {
             localStorage.setItem('fortune-tutorial-seen', 'true');
             this.time.delayedCall(1500, () => this.showTutorial());
         }
-
-        // Add version text
-        this.add.text(width - 10, height - 10, 'v1.0', {
-            fontSize: '12px',
-            fontFamily: 'monospace',
-            color: '#444444'
-        }).setOrigin(1, 1).setDepth(100);
     }
 
     setupSounds() {
@@ -169,40 +153,19 @@ export default class MenuScene extends Phaser.Scene {
         }
     }
 
-    createMenuStats(width, height) {
-        const gamesPlayed = parseInt(localStorage.getItem('fortune-games-played') || '0', 10);
-        const bestScore = this.getBestScore();
-        const xpManager = new XPManager();
-        const level = xpManager.getLevel();
-
-        const statsStr = `Games: ${gamesPlayed}  |  Best: ${bestScore.toLocaleString()}  |  Lv.${level}`;
-        this.add.text(width / 2, height / 6 + 140, statsStr, {
-            fontSize: '12px',
-            fontFamily: 'monospace',
-            color: '#556677'
-        }).setOrigin(0.5).setDepth(11);
-    }
-
-    createTitleSparkles(width, height) {
-        const titleY = height / 6;
-        // Spawn sparkle particles around the title area
-        this.time.addEvent({
-            delay: 400,
-            loop: true,
-            callback: () => {
-                const sx = width / 2 + Phaser.Math.Between(-160, 160);
-                const sy = titleY + Phaser.Math.Between(-30, 30);
-                const sparkle = this.add.circle(sx, sy, Phaser.Math.Between(1, 3), 0xffffff, 0.8);
-                sparkle.setDepth(9);
-                this.tweens.add({
-                    targets: sparkle,
-                    alpha: 0,
-                    scale: 0,
-                    duration: Phaser.Math.Between(400, 800),
-                    onComplete: () => sparkle.destroy()
-                });
-            }
+    createBottomButtons(width, height) {
+        // STORY replay button (y:510)
+        this.createSmallButton(width / 2 - 80, 510, 'STORY', 0x8844ff, () => {
+            this.fadeToScene('IntroScene', { replay: true });
         });
+
+        // SOUND toggle button (y:510)
+        const soundLevel = localStorage.getItem('fortune-sound-level') || 'HIGH';
+        const soundLabel = soundLevel === 'OFF' ? 'SOUND OFF' : soundLevel === 'LOW' ? 'SOUND LOW' : 'SOUND ON';
+        this.soundBtnText = null;
+        this.createSmallButton(width / 2 + 80, 510, soundLabel, 0x44aa44, () => {
+            this.cycleSoundLevel();
+        }, (txt) => { this.soundBtnText = txt; });
     }
 
     fadeToScene(sceneKey, data = {}) {
@@ -214,23 +177,25 @@ export default class MenuScene extends Phaser.Scene {
 
     createDailyChallengeBanner(width, height) {
         const dc = new DailyChallenge();
-        const bannerY = height - 55;
+        const bannerY = 440;
 
         // Banner background
-        const bg = this.add.rectangle(width / 2, bannerY, 500, 36, 0x111133, 0.8);
-        bg.setStrokeStyle(1, 0xffd700, 0.5);
+        const bg = this.add.rectangle(width / 2, bannerY, 500, 28, 0x111133, 0.8);
+        bg.setStrokeStyle(1, 0xffd700, 0.4);
         bg.setDepth(12);
 
         if (dc.completed) {
-            const text = this.add.text(width / 2, bannerY, 'DAILY CHALLENGE: COMPLETED!', {
-                fontSize: '14px', fontFamily: 'monospace', color: '#00ff00', fontStyle: 'bold'
+            this.add.text(width / 2, bannerY, 'DAILY CHALLENGE: COMPLETED!', {
+                fontSize: '12px', fontFamily: 'monospace', color: '#00ff00', fontStyle: 'bold'
             }).setOrigin(0.5).setDepth(13);
         } else {
-            const text = this.add.text(width / 2, bannerY, `DAILY CHALLENGE: ${dc.description}`, {
-                fontSize: '13px', fontFamily: 'monospace', color: '#ffd700'
+            // Truncate if too long
+            let desc = dc.description || '';
+            if (desc.length > 50) desc = desc.substring(0, 47) + '...';
+            const text = this.add.text(width / 2, bannerY, `DAILY: ${desc}`, {
+                fontSize: '11px', fontFamily: 'monospace', color: '#ffd700'
             }).setOrigin(0.5).setDepth(13);
 
-            // Subtle pulse
             this.tweens.add({
                 targets: text,
                 alpha: { from: 1, to: 0.6 },
@@ -243,129 +208,76 @@ export default class MenuScene extends Phaser.Scene {
 
     createXPDisplay(width, height) {
         const xpManager = new XPManager();
-        const level = xpManager.getLevel();
         const xp = xpManager.getXP();
         const progress = xpManager.getXPProgress();
         const nextReq = xpManager.getXPForNextLevel();
-        const title = xpManager.getTitle();
 
-        const xpY = height - 90;
+        const xpY = 470;
 
-        // Level text
-        let levelStr = `Lv.${level}`;
-        if (title) levelStr += ` - ${title}`;
-
-        const lvlText = this.add.text(width / 2, xpY - 12, levelStr, {
-            fontSize: '16px',
-            fontFamily: 'monospace',
-            color: '#ffd700',
-            fontStyle: 'bold'
-        });
-        lvlText.setOrigin(0.5);
-        lvlText.setDepth(12);
-
-        // XP bar background
-        const barWidth = 200;
-        const barHeight = 8;
+        // XP bar background (thin, wide)
+        const barWidth = 400;
+        const barHeight = 6;
         const barX = width / 2 - barWidth / 2;
 
-        const barBg = this.add.rectangle(width / 2, xpY + 6, barWidth, barHeight, 0x333333);
+        const barBg = this.add.rectangle(width / 2, xpY, barWidth, barHeight, 0x333333);
         barBg.setDepth(12);
 
         // XP bar fill
         const fillWidth = Math.max(1, barWidth * progress);
-        const barFill = this.add.rectangle(barX + fillWidth / 2, xpY + 6, fillWidth, barHeight, 0xffd700);
+        const barFill = this.add.rectangle(barX + fillWidth / 2, xpY, fillWidth, barHeight, 0xffd700);
         barFill.setDepth(13);
 
         // XP text
         const xpStr = nextReq !== null ? `${xp} / ${nextReq} XP` : `${xp} XP (MAX)`;
-        const xpText = this.add.text(width / 2, xpY + 18, xpStr, {
-            fontSize: '11px',
+        this.add.text(width / 2, xpY + 10, xpStr, {
+            fontSize: '10px',
             fontFamily: 'monospace',
-            color: '#888888'
-        });
-        xpText.setOrigin(0.5);
-        xpText.setDepth(12);
+            color: '#777777'
+        }).setOrigin(0.5).setDepth(12);
     }
 
     createTitle(width, height) {
-        // Main title with glow effect
-        const titleGlow = this.add.text(width / 2, height / 6, 'FORTUNE', {
-            fontSize: '72px',
-            fontFamily: 'monospace',
-            color: '#003344'
-        });
-        titleGlow.setOrigin(0.5);
-        titleGlow.setDepth(10);
-        titleGlow.setAlpha(0.5);
+        // TOP SECTION (y: 30-120)
 
-        const title = this.add.text(width / 2, height / 6, 'FORTUNE', {
-            fontSize: '72px',
+        // Main title 'FORTUNE' at y:50
+        const title = this.add.text(width / 2, 50, 'FORTUNE', {
+            fontSize: '48px',
             fontFamily: 'monospace',
             color: '#00ffff',
             stroke: '#0080ff',
-            strokeThickness: 4,
-            shadow: {
-                offsetX: 0,
-                offsetY: 0,
-                color: '#00ffff',
-                blur: 20,
-                fill: true
-            }
+            strokeThickness: 3
         });
         title.setOrigin(0.5);
         title.setDepth(11);
 
-        // Pulsing glow animation on title
+        // Subtle pulse on title
         this.tweens.add({
-            targets: [title, titleGlow],
-            alpha: { from: 1, to: 0.7 },
+            targets: title,
+            alpha: { from: 1, to: 0.75 },
             duration: 1500,
             yoyo: true,
             repeat: -1,
             ease: 'Sine.easeInOut'
         });
 
-        // Scale pulse on glow
-        this.tweens.add({
-            targets: titleGlow,
-            scaleX: { from: 1, to: 1.05 },
-            scaleY: { from: 1, to: 1.05 },
-            duration: 1500,
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut'
-        });
-
-        // "by Ridhaan" credit in italics
-        const credit = this.add.text(width / 2, height / 6 + 50, 'by Ridhaan', {
-            fontSize: '18px',
-            fontFamily: 'monospace',
-            fontStyle: 'italic',
-            color: '#88ccff'
-        });
-        credit.setOrigin(0.5);
-        credit.setDepth(11);
-
-        // Subtitle with typewriter effect
+        // Subtitle ':: SPACE SHOOTER ::' at y:80
         const subtitleText = ':: SPACE SHOOTER ::';
-        const subtitle = this.add.text(width / 2, height / 6 + 85, '', {
-            fontSize: '24px',
+        const subtitle = this.add.text(width / 2, 82, '', {
+            fontSize: '16px',
             fontFamily: 'monospace',
             color: '#ff00ff',
             stroke: '#660066',
-            strokeThickness: 2
+            strokeThickness: 1
         });
         subtitle.setOrigin(0.5);
         subtitle.setDepth(11);
 
-        // Typewriter animation with sound
+        // Typewriter animation
         let charIndex = 0;
         this.time.addEvent({
             delay: 80,
             callback: () => {
                 subtitle.setText(subtitleText.substring(0, charIndex + 1));
-                // Play type sound for non-space characters
                 if (subtitleText[charIndex] !== ' ' && subtitleText[charIndex] !== ':') {
                     this.playTypeSound();
                 }
@@ -374,60 +286,28 @@ export default class MenuScene extends Phaser.Scene {
             repeat: subtitleText.length - 1
         });
 
-        // Pilot name display
+        // Commander name + level at y:105
         const pilotName = localStorage.getItem('fortune-pilot-name') || 'Pilot';
-        const pilotText = this.add.text(width / 2, height / 6 + 108, `Commander ${pilotName}`, {
-            fontSize: '14px',
+        const xpManager = new XPManager();
+        const level = xpManager.getLevel();
+        this.add.text(width / 2, 105, `Commander ${pilotName}  |  Lv.${level}`, {
+            fontSize: '12px',
             fontFamily: 'monospace',
-            color: '#44ff88',
-            fontStyle: 'bold'
-        });
-        pilotText.setOrigin(0.5);
-        pilotText.setDepth(11);
-
-        // Blinking tagline
-        const tagline = this.add.text(width / 2, height / 6 + 128, 'DEFEND THE GALAXY', {
-            fontSize: '14px',
-            fontFamily: 'monospace',
-            color: '#ffff00'
-        });
-        tagline.setOrigin(0.5);
-        tagline.setDepth(11);
-        tagline.setAlpha(0);
-
-        // Fade in tagline after subtitle types
-        this.time.delayedCall(subtitleText.length * 80 + 500, () => {
-            this.playSound('collect', 0.25);
-            this.tweens.add({
-                targets: tagline,
-                alpha: { from: 0, to: 1 },
-                duration: 500
-            });
-
-            // Then blink
-            this.time.delayedCall(500, () => {
-                this.tweens.add({
-                    targets: tagline,
-                    alpha: { from: 1, to: 0.3 },
-                    duration: 800,
-                    yoyo: true,
-                    repeat: -1
-                });
-            });
-        });
+            color: '#44ff88'
+        }).setOrigin(0.5).setDepth(11);
     }
 
     createButtons(width, height) {
-        const buttonY = height / 2 + 50;
+        // MIDDLE SECTION (y: 140-350)
 
-        // Difficulty selector
+        // Difficulty selector at y:220
         this.selectedDifficulty = localStorage.getItem('fortune-difficulty') || 'NORMAL';
-        this.createDifficultySelector(width, buttonY - 70);
+        this.createDifficultySelector(width, 220);
 
-        // Start button with retro border
+        // START GAME button at y:260
         this.createRetroButton(
             width / 2,
-            buttonY,
+            260,
             'START GAME',
             0x00ffff,
             () => {
@@ -450,115 +330,45 @@ export default class MenuScene extends Phaser.Scene {
             }
         );
 
-        // Skins button
-        this.createRetroButton(
-            width / 2 - 120,
-            buttonY + 60,
-            'SKINS',
-            0xffd700,
-            () => this.showSkinsOverlay()
-        );
+        // ENDLESS MODE button at y:305
+        this.createSmallButton(width / 2 - 80, 305, 'ENDLESS MODE', 0xff00ff, () => this.startEndlessMode());
 
-        // Leaderboard button
-        this.createRetroButton(
-            width / 2 + 120,
-            buttonY + 60,
-            'SCORES',
-            0x666688,
-            () => this.showLeaderboard()
-        );
-
-        // Achievements button
-        this.createRetroButton(
-            width / 2 - 120,
-            buttonY + 115,
-            'ACHIEVEMENTS',
-            0xffa500,
-            () => this.showAchievements()
-        );
-
-        // Pets button
-        this.createRetroButton(
-            width / 2 + 120,
-            buttonY + 115,
-            'PETS',
-            0xff88ff,
-            () => this.showPetsOverlay()
-        );
-
-        // ENDLESS MODE button
-        this.createRetroButton(
-            width / 2 - 120,
-            buttonY + 115,
-            'ENDLESS MODE',
-            0xff00ff,
-            () => this.startEndlessMode()
-        );
-
-        // CHALLENGE MODE button
-        this.createRetroButton(
-            width / 2 + 120,
-            buttonY + 115,
-            'CHALLENGE',
-            0xaa44ff,
-            () => this.fadeToScene('ChallengeSelectScene')
-        );
-
-        // Row of small buttons
-        this.createSmallButton(width / 2 - 130, buttonY + 165, 'STATS', 0x44aaff, () => this.showStatsOverlay());
-        this.createSmallButton(width / 2, buttonY + 165, 'BESTIARY', 0xff8844, () => this.showBestiaryOverlay());
-        this.createSmallButton(width / 2 + 130, buttonY + 165, 'TRAILS', 0x44ff88, () => this.showTrailsOverlay());
-
-        // HOW TO PLAY button
-        this.createSmallButton(width / 2 - 100, buttonY + 200, 'HOW TO PLAY', 0x00ff88, () => {
-            this.showTutorial();
-        });
-
-        // WATCH REPLAY button
-        const hasReplay = !!localStorage.getItem('fortune-ghost-replay');
-        if (hasReplay) {
-            this.createSmallButton(width / 2 + 100, buttonY + 200, 'REPLAY', 0x00cccc, () => {
-                this.showReplayOverlay();
-            });
-        }
+        // CHALLENGE button at y:305
+        this.createSmallButton(width / 2 + 80, 305, 'CHALLENGE', 0xaa44ff, () => this.fadeToScene('ChallengeSelectScene'));
 
         // Endless best wave display
         const endlessBest = parseInt(localStorage.getItem('fortune-endless-best-wave') || '0', 10);
         if (endlessBest > 0) {
-            this.add.text(width / 2 - 120, buttonY + 140, `Best: Wave ${endlessBest}`, {
-                fontSize: '10px', fontFamily: 'monospace', color: '#ff88ff'
+            this.add.text(width / 2 - 80, 322, `Best: Wave ${endlessBest}`, {
+                fontSize: '9px', fontFamily: 'monospace', color: '#ff88ff'
             }).setOrigin(0.5, 0).setDepth(11);
         }
 
-        // STORY replay button (small)
-        this.createSmallButton(width / 2 - 80, buttonY + 235, 'STORY', 0x8844ff, () => {
-            this.fadeToScene('IntroScene', { replay: true });
-        });
+        // BOTTOM SECTION - Two rows of small buttons
 
-        // SOUND toggle button (small)
-        const soundLevel = localStorage.getItem('fortune-sound-level') || 'HIGH';
-        const soundLabel = soundLevel === 'OFF' ? 'SOUND OFF' : soundLevel === 'LOW' ? 'SOUND LOW' : 'SOUND ON';
-        this.soundBtnText = null;
-        this.createSmallButton(width / 2 + 80, buttonY + 235, soundLabel, 0x44aa44, () => {
-            this.cycleSoundLevel();
-        }, (txt) => { this.soundBtnText = txt; });
+        // Row 1 (y:370): SKINS | PETS | WEAPONS | ACHIEVEMENTS
+        const row1Y = 365;
+        const row1Spacing = 100;
+        const row1Start = width / 2 - 1.5 * row1Spacing;
+        this.createSmallButton(row1Start, row1Y, 'SKINS', 0xffd700, () => this.showSkinsOverlay());
+        this.createSmallButton(row1Start + row1Spacing, row1Y, 'PETS', 0xff88ff, () => this.showPetsOverlay());
+        this.createSmallButton(row1Start + row1Spacing * 2, row1Y, 'TRAILS', 0x44ff88, () => this.showTrailsOverlay());
+        this.createSmallButton(row1Start + row1Spacing * 3, row1Y, 'ACHIEVE.', 0xffa500, () => this.showAchievements());
 
-        // Blinking "INSERT COIN" text
-        const insertCoin = this.add.text(width / 2, buttonY - 30, '[ PRESS START ]', {
-            fontSize: '16px',
-            fontFamily: 'monospace',
-            color: '#00ff00'
-        });
-        insertCoin.setOrigin(0.5);
-        insertCoin.setDepth(11);
+        // Row 2 (y:400): STATS | BESTIARY | LEADERBOARD | HOW TO PLAY
+        const row2Y = 400;
+        this.createSmallButton(row1Start, row2Y, 'STATS', 0x44aaff, () => this.showStatsOverlay());
+        this.createSmallButton(row1Start + row1Spacing, row2Y, 'BESTIARY', 0xff8844, () => this.showBestiaryOverlay());
+        this.createSmallButton(row1Start + row1Spacing * 2, row2Y, 'SCORES', 0x666688, () => this.showLeaderboard());
 
-        this.tweens.add({
-            targets: insertCoin,
-            alpha: { from: 1, to: 0 },
-            duration: 500,
-            yoyo: true,
-            repeat: -1
-        });
+        // HOW TO PLAY / REPLAY
+        const hasReplay = !!localStorage.getItem('fortune-ghost-replay');
+        if (hasReplay) {
+            this.createSmallButton(row1Start + row1Spacing * 3, row2Y, 'HOW TO PLAY', 0x00ff88, () => this.showTutorial());
+            this.createSmallButton(width / 2, 430, 'REPLAY', 0x00cccc, () => this.showReplayOverlay());
+        } else {
+            this.createSmallButton(row1Start + row1Spacing * 3, row2Y, 'HOW TO PLAY', 0x00ff88, () => this.showTutorial());
+        }
     }
 
     createDifficultySelector(width, y) {
@@ -567,16 +377,16 @@ export default class MenuScene extends Phaser.Scene {
 
         modes.forEach((mode, i) => {
             const config = DIFFICULTY_MODES[mode];
-            const x = width / 2 + (i - 1) * 110;
+            const x = width / 2 + (i - 1) * 100;
             const isSelected = mode === this.selectedDifficulty;
 
-            const bg = this.add.rectangle(x, y, 95, 30, isSelected ? 0x223344 : 0x111122);
-            bg.setStrokeStyle(2, isSelected ? 0xffffff : config.color);
+            const bg = this.add.rectangle(x, y, 85, 26, isSelected ? 0x223344 : 0x111122);
+            bg.setStrokeStyle(1, isSelected ? 0xffffff : config.color);
             bg.setInteractive({ useHandCursor: true });
             bg.setDepth(10);
 
             const label = this.add.text(x, y, config.name, {
-                fontSize: '14px',
+                fontSize: '13px',
                 fontFamily: 'monospace',
                 color: isSelected ? '#ffffff' : Phaser.Display.Color.IntegerToColor(config.color).rgba
             });
@@ -796,11 +606,11 @@ export default class MenuScene extends Phaser.Scene {
     }
 
     createRetroButton(x, y, text, color, callback) {
-        const buttonWidth = 220;
-        const buttonHeight = 50;
+        const buttonWidth = 200;
+        const buttonHeight = 40;
 
-        // Outer border (double-line retro style)
-        const outerBorder = this.add.rectangle(x, y, buttonWidth + 8, buttonHeight + 8);
+        // Outer border
+        const outerBorder = this.add.rectangle(x, y, buttonWidth + 6, buttonHeight + 6);
         outerBorder.setStrokeStyle(2, color);
         outerBorder.setDepth(10);
 
@@ -819,50 +629,20 @@ export default class MenuScene extends Phaser.Scene {
         buttonText.setOrigin(0.5);
         buttonText.setDepth(11);
 
-        // Corner decorations
-        const cornerSize = 6;
-        const corners = [
-            { x: x - buttonWidth/2, y: y - buttonHeight/2 },
-            { x: x + buttonWidth/2, y: y - buttonHeight/2 },
-            { x: x - buttonWidth/2, y: y + buttonHeight/2 },
-            { x: x + buttonWidth/2, y: y + buttonHeight/2 }
-        ];
-
-        corners.forEach(corner => {
-            const c = this.add.rectangle(corner.x, corner.y, cornerSize, cornerSize, color);
-            c.setDepth(11);
-        });
-
         // Hover effects
         button.on('pointerover', () => {
             button.setFillStyle(0x223344);
-            outerBorder.setStrokeStyle(3, 0xffffff);
-            buttonText.setScale(1.05);
-
-            // Play hover sound
+            outerBorder.setStrokeStyle(2, 0xffffff);
             this.playHoverSound();
-
-            // Small screen shake
-            this.cameras.main.shake(50, 0.002);
         });
 
         button.on('pointerout', () => {
             button.setFillStyle(0x111122);
             outerBorder.setStrokeStyle(2, color);
-            buttonText.setScale(1);
         });
 
         button.on('pointerdown', () => {
-            // Play click sound
             this.playClickSound();
-            // Bounce effect
-            this.tweens.add({
-                targets: [button, buttonText],
-                scale: { from: 0.95, to: 1 },
-                duration: 150,
-                ease: 'Back.easeOut'
-            });
-            // Small delay to let sound play before transition
             this.time.delayedCall(100, callback);
         });
 
@@ -1070,15 +850,15 @@ export default class MenuScene extends Phaser.Scene {
         const width = this.scale.width;
         const height = this.scale.height;
         const centerX = width / 2;
-        const centerY = height / 6;
+        const centerY = 50;
 
         // Explode title letters outward
         const titleText = 'FORTUNE';
         for (let i = 0; i < titleText.length; i++) {
-            const charX = centerX + (i - 3) * 45;
+            const charX = centerX + (i - 3) * 35;
             const letter = this.add.text(charX, centerY, titleText[i], {
-                fontSize: '72px', fontFamily: 'monospace', color: '#00ffff',
-                stroke: '#0080ff', strokeThickness: 4
+                fontSize: '48px', fontFamily: 'monospace', color: '#00ffff',
+                stroke: '#0080ff', strokeThickness: 3
             }).setOrigin(0.5).setDepth(5000);
 
             const angle = (i - 3) * 0.4 + (Math.random() - 0.5) * 0.5;
@@ -1147,111 +927,20 @@ export default class MenuScene extends Phaser.Scene {
         });
     }
 
-    createInstructions(width, height) {
-        const instructionY = height - 80;
-
-        // Retro border box for instructions
-        const boxWidth = 350;
-        const boxHeight = 60;
-
-        const instructionBox = this.add.rectangle(width / 2, instructionY, boxWidth, boxHeight, 0x000000, 0.5);
-        instructionBox.setStrokeStyle(1, 0x444466);
-        instructionBox.setDepth(10);
-
-        const instructions = this.add.text(width / 2, instructionY,
-            'WASD/ARROWS: Move  |  SPACE: Shoot  |  ESC: Pause', {
-            fontSize: '13px',
-            fontFamily: 'monospace',
-            color: '#666699',
-            align: 'center'
-        });
-        instructions.setOrigin(0.5);
-        instructions.setDepth(11);
-    }
-
     createHeroShip(width, height) {
-        // Add player ship as decoration
-        const ship = this.add.image(width / 2, height / 2 - 20, 'player_m');
-        ship.setScale(3);
+        // Ship sprite at y:160, small scale
+        const ship = this.add.image(width / 2, 160, 'player_m');
+        ship.setScale(0.6);
         ship.setDepth(9);
 
         // Gentle floating animation
         this.tweens.add({
             targets: ship,
-            y: ship.y - 10,
+            y: ship.y - 6,
             duration: 2000,
             yoyo: true,
             repeat: -1,
             ease: 'Sine.easeInOut'
-        });
-
-        // Add exhaust effect below ship
-        const exhaust = this.add.image(width / 2, height / 2 + 25, 'exhaust_1');
-        exhaust.setScale(2.5);
-        exhaust.setDepth(8);
-        exhaust.setAlpha(0.8);
-
-        // Animate exhaust
-        let exhaustFrame = 1;
-        this.time.addEvent({
-            delay: 100,
-            callback: () => {
-                exhaustFrame = (exhaustFrame % 5) + 1;
-                if (this.textures.exists(`exhaust_${exhaustFrame}`)) {
-                    exhaust.setTexture(`exhaust_${exhaustFrame}`);
-                }
-            },
-            loop: true
-        });
-
-        // Make exhaust follow ship
-        this.tweens.add({
-            targets: exhaust,
-            y: exhaust.y - 10,
-            duration: 2000,
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut'
-        });
-    }
-
-    createBackgroundShips() {
-        // Periodically spawn enemy ships flying across
-        this.time.addEvent({
-            delay: 3000,
-            callback: () => this.spawnBackgroundEnemy(),
-            loop: true
-        });
-
-        // Spawn a couple immediately
-        this.time.delayedCall(500, () => this.spawnBackgroundEnemy());
-        this.time.delayedCall(1500, () => this.spawnBackgroundEnemy());
-    }
-
-    spawnBackgroundEnemy() {
-        const enemyTypes = ['enemy_scout_m', 'enemy_fighter_m', 'enemy_bomber_m'];
-        const type = Phaser.Utils.Array.GetRandom(enemyTypes);
-
-        const side = Math.random() > 0.5 ? 'left' : 'right';
-        const startX = side === 'left' ? -50 : this.scale.width + 50;
-        const endX = side === 'left' ? this.scale.width + 50 : -50;
-        const y = Phaser.Math.Between(50, this.scale.height - 150);
-
-        const enemy = this.add.image(startX, y, type);
-        enemy.setScale(1.5);
-        enemy.setAlpha(0.4);
-        enemy.setDepth(3);
-
-        if (side === 'right') {
-            enemy.setFlipX(true);
-        }
-
-        this.tweens.add({
-            targets: enemy,
-            x: endX,
-            duration: Phaser.Math.Between(4000, 7000),
-            ease: 'Linear',
-            onComplete: () => enemy.destroy()
         });
     }
 
