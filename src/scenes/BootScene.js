@@ -48,6 +48,51 @@ export default class BootScene extends Phaser.Scene {
         });
         assetText.setOrigin(0.5, 0.5);
 
+        // Fun loading tips (shown after 500ms)
+        const tips = [
+            'Pro tip: collect coins to build combos!',
+            'Did you know? You can change weapons with Q!',
+            'Try HARD mode for a real challenge!',
+            'Catch the Mystery Box for awesome rewards!',
+            'Shield power-up protects you from 3 hits!',
+            'Chain collectibles fast for combo multiplier!',
+            'Bombers explode bigger — watch out!',
+            'Graze enemy bullets for bonus points!'
+        ];
+        const tipText = this.make.text({
+            x: width / 2,
+            y: height / 2 + 90,
+            text: '',
+            style: {
+                font: '14px monospace',
+                fill: '#ffd700',
+                wordWrap: { width: 400 }
+            }
+        });
+        tipText.setOrigin(0.5, 0.5);
+
+        // Spinning loading indicator
+        const spinner = this.add.graphics();
+        spinner.setPosition(width / 2, height / 2 - 80);
+        let spinAngle = 0;
+        const spinTimer = this.time.addEvent({
+            delay: 30,
+            loop: true,
+            callback: () => {
+                spinAngle += 0.15;
+                spinner.clear();
+                spinner.lineStyle(3, 0x00ffff, 0.8);
+                spinner.beginPath();
+                spinner.arc(0, 0, 15, spinAngle, spinAngle + Math.PI * 1.5, false);
+                spinner.strokePath();
+            }
+        });
+
+        // Show tip after 500ms
+        const tipTimer = this.time.delayedCall(500, () => {
+            tipText.setText(tips[Math.floor(Math.random() * tips.length)]);
+        });
+
         // Update progress bar
         this.load.on('progress', (value) => {
             percentText.setText(parseInt(value * 100) + '%');
@@ -66,6 +111,9 @@ export default class BootScene extends Phaser.Scene {
             loadingText.destroy();
             percentText.destroy();
             assetText.destroy();
+            tipText.destroy();
+            spinner.destroy();
+            spinTimer.destroy();
         });
 
         // Log loading errors

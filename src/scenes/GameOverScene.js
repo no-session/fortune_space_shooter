@@ -26,6 +26,9 @@ export default class GameOverScene extends Phaser.Scene {
         gamesPlayed++;
         localStorage.setItem('fortune-games-played', gamesPlayed.toString());
 
+        // Fade in
+        this.cameras.main.fadeIn(300, 0, 0, 0);
+
         // Dark overlay
         this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.85);
 
@@ -220,9 +223,12 @@ export default class GameOverScene extends Phaser.Scene {
                 menuButton.setScale(1);
             });
             menuButton.on('pointerdown', () => {
-                this.scene.stop('GameOverScene');
-                this.scene.stop('GameScene');
-                this.scene.start('MenuScene');
+                this.cameras.main.fadeOut(300, 0, 0, 0);
+                this.cameras.main.once('camerafadeoutcomplete', () => {
+                    this.scene.stop('GameOverScene');
+                    this.scene.stop('GameScene');
+                    this.scene.start('MenuScene');
+                });
             });
 
             // Leaderboard button

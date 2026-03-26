@@ -246,28 +246,8 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
             }
         }
 
-        // Create explosion animation with defensive check
-        if (this.scene && this.scene.textures && this.scene.textures.exists('explosion1_1')) {
-            const explosion = this.scene.add.sprite(this.x, this.y, 'explosion1_1');
-            explosion.setScale(1);
-            explosion.setDepth(150);
-
-            if (this.scene.anims && this.scene.anims.exists('explode_small')) {
-                explosion.play('explode_small');
-                explosion.on('animationcomplete', () => {
-                    explosion.destroy();
-                });
-            } else {
-                // Fallback: destroy after a short delay
-                if (this.scene.time) {
-                    this.scene.time.delayedCall(300, () => {
-                        explosion.destroy();
-                    });
-                } else {
-                    explosion.destroy();
-                }
-            }
-        }
+        // Type-specific death effects
+        this.createDeathEffect();
 
         // Play explosion sound
         if (this.scene && this.scene.soundManager) {
@@ -291,6 +271,106 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         
         // Destroy enemy
         this.destroy();
+    }
+
+    createDeathEffect() {
+        if (!this.scene || !this.scene.textures) return;
+
+        const x = this.x;
+        const y = this.y;
+
+        switch (this.type) {
+            case ENEMY_TYPES.SCOUT:
+                // Small quick explosion (existing behavior)
+                this.playExplosionAnim(x, y, 'explode_small', 1);
+                break;
+
+            case ENEMY_TYPES.FIGHTER:
+                // Medium explosion + 2 bullet fragments flying outward (visual only)
+                this.playExplosionAnim(x, y, 'explode_medium', 1.2);
+                for (let i = 0; i < 2; i++) {
+                    const angle = i === 0 ? -1 : 1;
+                    const frag = this.scene.add.circle(x, y, 3, 0xff4400);
+                    frag.setDepth(150);
+                    this.scene.tweens.add({
+                        targets: frag,
+                        x: x + angle * Phaser.Math.Between(60, 100),
+                        y: y + Phaser.Math.Between(-30, 30),
+                        alpha: 0,
+                        duration: 400,
+                        onComplete: () => frag.destroy()
+                    });
+                }
+                break;
+
+            case ENEMY_TYPES.BOMBER:
+                // Large explosion + small screen shake
+                this.playExplosionAnim(x, y, 'explode_large', 1.5);
+                if (this.scene.cameras && this.scene.cameras.main) {
+                    this.scene.cameras.main.shake(150, 0.008);
+                }
+                break;
+
+            case ENEMY_TYPES.ELITE:
+                // Explosion + lightning bolt effect (cyan lines from death point)
+                this.playExplosionAnim(x, y, 'explode_medium', 1.3);
+                for (let i = 0; i < 4; i++) {
+                    const graphics = this.scene.add.graphics();
+                    graphics.setDepth(151);
+                    const endX = x + Phaser.Math.Between(-80, 80);
+                    const endY = y + Phaser.Math.Between(-80, 80);
+                    const midX = (x + endX) / 2 + Phaser.Math.Between(-20, 20);
+                    const midY = (y + endY) / 2 + Phaser.Math.Between(-20, 20);
+                    graphics.lineStyle(2, 0x00ffff, 0.9);
+                    graphics.beginPath();
+                    graphics.moveTo(x, y);
+                    graphics.lineTo(midX, midY);
+                    graphics.lineTo(endX, endY);
+                    graphics.strokePath();
+                    this.scene.tweens.add({
+                        targets: graphics,
+                        alpha: 0,
+                        duration: 300,
+                        delay: i * 30,
+                        onComplete: () => graphics.destroy()
+                    });
+                }
+                break;
+
+            case ENEMY_TYPES.SPLITTER:
+                // Green poof
+                for (let i = 0; i < 8; i++) {
+                    const poof = this.scene.add.circle(x, y, Phaser.Math.Between(3, 6), 0x44ff44);
+                    poof.setDepth(150);
+                    this.scene.tweens.add({
+                        targets: poof,
+                        x: x + Phaser.Math.Between(-50, 50),
+                        y: y + Phaser.Math.Between(-50, 50),
+                        alpha: 0,
+                        scale: 0.3,
+                        duration: 350,
+                        onComplete: () => poof.destroy()
+                    });
+                }
+                break;
+
+            default:
+                this.playExplosionAnim(x, y, 'explode_small', 1);
+                break;
+        }
+    }
+
+    playExplosionAnim(x, y, animKey, scale) {
+        if (!this.scene.textures.exists('explosion1_1')) return;
+        const explosion = this.scene.add.sprite(x, y, 'explosion1_1');
+        explosion.setScale(scale);
+        explosion.setDepth(150);
+        if (this.scene.anims && this.scene.anims.exists(animKey)) {
+            explosion.play(animKey);
+            explosion.on('animationcomplete', () => explosion.destroy());
+        } else {
+            this.scene.time.delayedCall(300, () => explosion.destroy());
+        }
     }
 
     onWorldBounds() {

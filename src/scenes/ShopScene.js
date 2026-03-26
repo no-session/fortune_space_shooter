@@ -33,6 +33,9 @@ export default class ShopScene extends Phaser.Scene {
         const height = this.scale.height;
         const gameScene = this.scene.get('GameScene');
 
+        // Fade in
+        this.cameras.main.fadeIn(300, 0, 0, 0);
+
         // Background with gradient feel
         this.add.rectangle(width / 2, height / 2, width, height, 0x050520);
 
@@ -184,8 +187,11 @@ export default class ShopScene extends Phaser.Scene {
         contBtn.on('pointerover', () => { contBtn.setFillStyle(0x00dddd); contBtn.setScale(1.08); contText.setScale(1.08); });
         contBtn.on('pointerout', () => { contBtn.setFillStyle(0x00ffff); contBtn.setScale(1); contText.setScale(1); });
         contBtn.on('pointerdown', () => {
-            this.scene.stop('ShopScene');
-            this.scene.resume('GameScene');
+            this.cameras.main.fadeOut(300, 0, 0, 0);
+            this.cameras.main.once('camerafadeoutcomplete', () => {
+                this.scene.stop('ShopScene');
+                this.scene.resume('GameScene');
+            });
         });
 
         this.purchasedUpgrades = [];

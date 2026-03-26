@@ -26,6 +26,9 @@ export default class GameScene extends Phaser.Scene {
     }
 
     create() {
+        // Fade in
+        this.cameras.main.fadeIn(300, 0, 0, 0);
+
         // Load difficulty settings
         const difficultyKey = localStorage.getItem('fortune-difficulty') || 'NORMAL';
         this.difficulty = DIFFICULTY_MODES[difficultyKey] || DIFFICULTY_MODES.NORMAL;
@@ -150,6 +153,23 @@ export default class GameScene extends Phaser.Scene {
             this.scene.launch('PauseScene');
         });
 
+        // Camera: subtle follow player with lerp
+        this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+        this.cameras.main.setFollowOffset(0, -this.scale.height / 2 + 50);
+        // Stop following so it's just a subtle lag, not a full chase
+        this.time.delayedCall(100, () => {
+            this.cameras.main.stopFollow();
+        });
+
+        // Low health vignette overlay
+        this.lowHealthOverlay = this.add.rectangle(
+            this.scale.width / 2, this.scale.height / 2,
+            this.scale.width + 40, this.scale.height + 40,
+            0xff0000, 0
+        );
+        this.lowHealthOverlay.setDepth(998);
+        this.lowHealthOverlay.setScrollFactor(0);
+
         // Game state
         this.gameOver = false;
         this.paused = false;
@@ -200,6 +220,9 @@ export default class GameScene extends Phaser.Scene {
         }
 
         this.effectManager.showWaveName(waveNumber, waveName, isBoss);
+
+        // Update background tint every 5 waves
+        this.setBackgroundTintForWave(waveNumber);
     }
 
     createStarfield() {
@@ -213,7 +236,11 @@ export default class GameScene extends Phaser.Scene {
         this.bg2.setDepth(0);
         
         this.bgSpeed = 50;
-        
+
+        // Background ambient objects (planets, nebulae)
+        this.bgObjects = [];
+        this.createBgAmbientObjects();
+
         // Create additional star layers for parallax effect on top
         this.starfieldLayers = [];
         
@@ -264,6 +291,45 @@ export default class GameScene extends Phaser.Scene {
         });
     }
 
+    createBgAmbientObjects() {
+        // Create 2-3 distant parallax objects (planets/nebulae)
+        const types = ['planet', 'planet', 'nebula'];
+        for (let i = 0; i < 3; i++) {
+            const type = types[i];
+            const x = Phaser.Math.Between(50, this.scale.width - 50);
+            const y = Phaser.Math.Between(-200, this.scale.height);
+            const obj = this.add.circle(x, y,
+                type === 'planet' ? Phaser.Math.Between(30, 60) : Phaser.Math.Between(50, 90),
+                type === 'planet' ? Phaser.Math.Between(0x334455, 0x665544) : 0x220044,
+                type === 'planet' ? 0.12 : 0.08
+            );
+            obj.setDepth(1);
+            obj._bgType = type;
+            obj._speed = type === 'planet' ? 8 + i * 3 : 5;
+            this.bgObjects.push(obj);
+        }
+    }
+
+    updateBgAmbientObjects() {
+        const delta = this.game.loop.delta / 1000;
+        for (const obj of this.bgObjects) {
+            obj.y += obj._speed * delta;
+            if (obj.y > this.scale.height + 100) {
+                obj.y = -100;
+                obj.x = Phaser.Math.Between(50, this.scale.width - 50);
+            }
+        }
+    }
+
+    setBackgroundTintForWave(wave) {
+        // Every 5 waves, shift background hue
+        const tints = [0xffffff, 0xddaaff, 0xaaddff, 0xaaffaa, 0xffddaa, 0xffaacc];
+        const tintIndex = Math.floor(wave / 5) % tints.length;
+        const tint = tints[tintIndex];
+        if (this.bg1) this.bg1.setTint(tint);
+        if (this.bg2) this.bg2.setTint(tint);
+    }
+
     setupCollisions() {
         // Player bullets vs enemies (check all active formations)
         this.physics.add.overlap(
@@ -272,8 +338,11 @@ export default class GameScene extends Phaser.Scene {
             (bullet, enemy) => {
                 if (bullet.active && enemy.active) {
                     bullet.destroy();
-                    this.bonusSystem.recordShotHit(); // Track accuracy
-                    enemy.takeDamage(10);
+                    this.bonusSystem.recordShotHit();
+                    const isCrit = Math.random() < 0.1;
+                    const damage = isCrit ? 20 : 10;
+                    enemy.takeDamage(damage);
+                    this.showDamageNumber(enemy.x, enemy.y, damage, isCrit);
                 }
             }
         );
@@ -285,8 +354,11 @@ export default class GameScene extends Phaser.Scene {
             (bullet, boss) => {
                 if (bullet.active && boss.active) {
                     bullet.destroy();
-                    this.bonusSystem.recordShotHit(); // Track accuracy
-                    boss.takeDamage(10);
+                    this.bonusSystem.recordShotHit();
+                    const isCrit = Math.random() < 0.1;
+                    const damage = isCrit ? 20 : 10;
+                    boss.takeDamage(damage);
+                    this.showDamageNumber(boss.x, boss.y, damage, isCrit);
                 }
             }
         );
@@ -417,7 +489,21 @@ export default class GameScene extends Phaser.Scene {
             color: '#ffffff'
         });
         this.scoreText.setDepth(1000);
-        
+
+        // Multiplier badge (next to score)
+        this.multiplierBadge = this.add.text(0, 10, '', {
+            fontSize: '16px',
+            fontFamily: 'monospace',
+            color: '#ffd700',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        this.multiplierBadge.setDepth(1001);
+        this.multiplierBadge.setAlpha(0);
+        this._lastMultiplier = 1;
+        this._scorePulseTween = null;
+
         // Combo text
         this.comboText = this.add.text(10, 35, '', {
             fontSize: '18px',
@@ -608,10 +694,67 @@ export default class GameScene extends Phaser.Scene {
         this.scoreText.setText(`Score: ${this.scoreManager.getScore()}`);
 
         const combo = this.scoreManager.getCombo();
+        const multiplier = this.scoreManager.getComboMultiplier();
+
         if (combo > 0) {
-            this.comboText.setText(`Combo: x${this.scoreManager.getComboMultiplier().toFixed(1)}`);
+            this.comboText.setText(`Combo: x${multiplier.toFixed(1)}`);
+
+            // Position multiplier badge next to score text
+            this.multiplierBadge.setX(this.scoreText.x + this.scoreText.width + 10);
+            this.multiplierBadge.setText(`x${multiplier.toFixed(1)}`);
+            this.multiplierBadge.setAlpha(1);
+
+            // Pulse score text when multiplier active
+            if (!this._scorePulseTween) {
+                this._scorePulseTween = this.tweens.add({
+                    targets: this.scoreText,
+                    alpha: { from: 1, to: 0.7 },
+                    duration: 400,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut'
+                });
+            }
+
+            // Flash badge bigger when multiplier increases
+            if (multiplier > this._lastMultiplier) {
+                this.tweens.add({
+                    targets: this.multiplierBadge,
+                    scale: { from: 1.6, to: 1 },
+                    duration: 300,
+                    ease: 'Back.easeOut'
+                });
+            }
+            this._lastMultiplier = multiplier;
         } else {
+            // Combo lost - show fade text if we had a multiplier
+            if (this._lastMultiplier > 1) {
+                this._lastMultiplier = 1;
+                const lostText = this.add.text(this.scoreText.x + 60, this.scoreText.y + 20, 'combo lost', {
+                    fontSize: '12px',
+                    fontFamily: 'monospace',
+                    color: '#ff4444',
+                    fontStyle: 'italic'
+                });
+                lostText.setDepth(1001);
+                this.tweens.add({
+                    targets: lostText,
+                    alpha: 0,
+                    y: lostText.y - 20,
+                    duration: 800,
+                    onComplete: () => lostText.destroy()
+                });
+            }
+
             this.comboText.setText('');
+            this.multiplierBadge.setAlpha(0);
+
+            // Stop score pulse
+            if (this._scorePulseTween) {
+                this._scorePulseTween.stop();
+                this._scorePulseTween = null;
+                this.scoreText.setAlpha(1);
+            }
         }
 
         // Update shop currency display
@@ -720,9 +863,10 @@ export default class GameScene extends Phaser.Scene {
             this.updateBonusStage(this.game.loop.delta);
         }
 
-        // Update starfield
+        // Update starfield and ambient bg objects
         this.updateStarfield();
-        
+        this.updateBgAmbientObjects();
+
         // Update player
         this.player.update(time);
         
@@ -973,6 +1117,9 @@ export default class GameScene extends Phaser.Scene {
 
         // --- UPDATE RADAR ---
         this.updateRadar();
+
+        // --- CAMERA EFFECTS ---
+        this.updateCameraEffects();
 
         // --- DRONE BULLET COLLISIONS ---
         if (this.drone && this.drone.alive && this.drone.bullets) {
@@ -1392,6 +1539,8 @@ export default class GameScene extends Phaser.Scene {
         // Return to normal after 2s real time (adjusted for 0.5x scale)
         this.time.delayedCall(1000, () => {
             this.time.timeScale = 1;
+            // Zoom back to normal after boss dies
+            this.cameras.main.zoomTo(1, 500);
         });
     }
 
@@ -1448,6 +1597,9 @@ export default class GameScene extends Phaser.Scene {
     applyPowerUp(type) {
         const config = POWERUP_CONFIG[type];
         this.powerupsCollected++;
+
+        // Camera zoom pulse on power-up collect
+        this.cameraZoomPulse();
 
         // Show announcement
         this.effectManager.showScorePopup(
@@ -1559,6 +1711,9 @@ export default class GameScene extends Phaser.Scene {
         warningText.setOrigin(0.5);
         warningText.setDepth(1000);
         warningText.setAlpha(0);
+
+        // Boss entrance: zoom out to show more battlefield
+        this.cameras.main.zoomTo(0.95, 1500);
 
         // Flash 3 times
         let flashCount = 0;
@@ -1977,7 +2132,13 @@ export default class GameScene extends Phaser.Scene {
         if (this.gameOver) return;
 
         this.gameOver = true;
-        this.scene.pause();
+
+        // Fade out before showing game over
+        this.cameras.main.fadeOut(300, 0, 0, 0);
+        this.cameras.main.once('camerafadeoutcomplete', () => {
+            this.scene.pause();
+            this._launchGameOver();
+        });
 
         // Clean up touch controls
         if (this.touchControls) {
@@ -2011,21 +2172,94 @@ export default class GameScene extends Phaser.Scene {
             this._xpResult = xpResult;
         }
 
-        // Gather all stats
-        const maxCombo = this.scoreManager.getMaxCombo();
-        const timePlayed = Date.now() - this.gameStartTime;
-        const achievementsUnlocked = this.achievementManager ? this.achievementManager.getSessionUnlocked() : [];
-
-        this.scene.launch('GameOverScene', {
+        // Gather all stats (store for deferred launch)
+        this._gameOverData = {
             score: finalScore,
             wave: this.waveManager.getCurrentWave(),
-            maxCombo: maxCombo,
+            maxCombo: this.scoreManager.getMaxCombo(),
             enemiesKilled: this.totalKills,
             accuracy: this.bonusSystem.getAccuracyPercent(),
             powerupsCollected: this.powerupsCollected,
-            timePlayed: timePlayed,
-            achievementsUnlocked: achievementsUnlocked,
+            timePlayed: Date.now() - this.gameStartTime,
+            achievementsUnlocked: this.achievementManager ? this.achievementManager.getSessionUnlocked() : [],
             xpResult: this._xpResult || null
+        };
+
+        // If fade hasn't been set up (fallback), launch immediately
+        if (!this.cameras.main) {
+            this._launchGameOver();
+        }
+    }
+
+    updateCameraEffects() {
+        if (!this.player || !this.player.active) return;
+
+        // Subtle camera lag following player movement
+        const cam = this.cameras.main;
+        const targetX = (this.player.x - this.scale.width / 2) * 0.03;
+        const targetY = (this.player.y - this.scale.height / 2) * 0.03;
+        cam.scrollX += (targetX - cam.scrollX) * 0.1;
+        cam.scrollY += (targetY - cam.scrollY) * 0.1;
+
+        // Low health vignette
+        if (this.lowHealthOverlay) {
+            const healthPct = this.player.health / this.player.maxHealth;
+            if (healthPct <= 0.25) {
+                const pulse = 0.08 + 0.04 * Math.sin(this.time.now * 0.005);
+                this.lowHealthOverlay.setAlpha(pulse);
+            } else {
+                this.lowHealthOverlay.setAlpha(0);
+            }
+        }
+    }
+
+    cameraZoomPulse() {
+        const cam = this.cameras.main;
+        cam.zoomTo(1.02, 100);
+        this.time.delayedCall(100, () => {
+            cam.zoomTo(1, 100);
         });
+    }
+
+    showDamageNumber(x, y, damage, isCrit) {
+        const text = this.add.text(x + Phaser.Math.Between(-10, 10), y - 10, isCrit ? `-${damage}!` : `-${damage}`, {
+            fontSize: isCrit ? '16px' : '13px',
+            fontFamily: 'monospace',
+            color: isCrit ? '#ffff00' : '#ffffff',
+            fontStyle: isCrit ? 'bold' : 'normal',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        text.setOrigin(0.5);
+        text.setDepth(160);
+
+        this.tweens.add({
+            targets: text,
+            y: y - 40,
+            alpha: 0,
+            duration: 500,
+            ease: 'Power1',
+            onComplete: () => text.destroy()
+        });
+
+        // Spark effect for crits
+        if (isCrit) {
+            for (let i = 0; i < 4; i++) {
+                const spark = this.add.circle(x, y, 2, 0xffff00);
+                spark.setDepth(160);
+                this.tweens.add({
+                    targets: spark,
+                    x: x + Phaser.Math.Between(-25, 25),
+                    y: y + Phaser.Math.Between(-25, 25),
+                    alpha: 0,
+                    duration: 250,
+                    onComplete: () => spark.destroy()
+                });
+            }
+        }
+    }
+
+    _launchGameOver() {
+        this.scene.launch('GameOverScene', this._gameOverData);
     }
 }

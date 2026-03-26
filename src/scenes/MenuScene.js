@@ -13,6 +13,9 @@ export default class MenuScene extends Phaser.Scene {
         const width = this.scale.width;
         const height = this.scale.height;
 
+        // Fade in
+        this.cameras.main.fadeIn(300, 0, 0, 0);
+
         // Setup sound effects for menu
         this.setupSounds();
 
@@ -45,6 +48,19 @@ export default class MenuScene extends Phaser.Scene {
 
         // XP and level display
         this.createXPDisplay(width, height);
+
+        // Total stats on menu
+        this.createMenuStats(width, height);
+
+        // Credits at bottom
+        this.add.text(width / 2, height - 15, 'Made with \u2764\uFE0F by Ridhaan & Papa', {
+            fontSize: '12px',
+            fontFamily: 'monospace',
+            color: '#555577'
+        }).setOrigin(0.5, 1).setDepth(100);
+
+        // Sparkle effects behind title
+        this.createTitleSparkles(width, height);
 
         // Add version text
         this.add.text(width - 10, height - 10, 'v1.0', {
@@ -140,6 +156,49 @@ export default class MenuScene extends Phaser.Scene {
         } catch (e) {
             // Ignore sound errors
         }
+    }
+
+    createMenuStats(width, height) {
+        const gamesPlayed = parseInt(localStorage.getItem('fortune-games-played') || '0', 10);
+        const bestScore = this.getBestScore();
+        const xpManager = new XPManager();
+        const level = xpManager.getLevel();
+
+        const statsStr = `Games: ${gamesPlayed}  |  Best: ${bestScore.toLocaleString()}  |  Lv.${level}`;
+        this.add.text(width / 2, height / 6 + 140, statsStr, {
+            fontSize: '12px',
+            fontFamily: 'monospace',
+            color: '#556677'
+        }).setOrigin(0.5).setDepth(11);
+    }
+
+    createTitleSparkles(width, height) {
+        const titleY = height / 6;
+        // Spawn sparkle particles around the title area
+        this.time.addEvent({
+            delay: 400,
+            loop: true,
+            callback: () => {
+                const sx = width / 2 + Phaser.Math.Between(-160, 160);
+                const sy = titleY + Phaser.Math.Between(-30, 30);
+                const sparkle = this.add.circle(sx, sy, Phaser.Math.Between(1, 3), 0xffffff, 0.8);
+                sparkle.setDepth(9);
+                this.tweens.add({
+                    targets: sparkle,
+                    alpha: 0,
+                    scale: 0,
+                    duration: Phaser.Math.Between(400, 800),
+                    onComplete: () => sparkle.destroy()
+                });
+            }
+        });
+    }
+
+    fadeToScene(sceneKey, data) {
+        this.cameras.main.fadeOut(300, 0, 0, 0);
+        this.cameras.main.once('camerafadeoutcomplete', () => {
+            this.scene.start(sceneKey, data);
+        });
     }
 
     createDailyChallengeBanner(width, height) {
@@ -360,11 +419,11 @@ export default class MenuScene extends Phaser.Scene {
                     if (data.isMumbai) {
                         this.showRidhaanPrompt();
                     } else {
-                        this.scene.start('GameScene');
+                        this.fadeToScene('GameScene');
                     }
                 })
                 .catch(() => {
-                    this.scene.start('GameScene');
+                    this.fadeToScene('GameScene');
                 });
             }
         );
@@ -708,6 +767,13 @@ export default class MenuScene extends Phaser.Scene {
         button.on('pointerdown', () => {
             // Play click sound
             this.playClickSound();
+            // Bounce effect
+            this.tweens.add({
+                targets: [button, buttonText],
+                scale: { from: 0.95, to: 1 },
+                duration: 150,
+                ease: 'Back.easeOut'
+            });
             // Small delay to let sound play before transition
             this.time.delayedCall(100, callback);
         });
