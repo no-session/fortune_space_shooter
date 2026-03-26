@@ -752,3 +752,84 @@ export const BOSS_CONFIG = {
         }
     }
 };
+
+// Trail Styles (unlockable via XP level)
+export const TRAIL_STYLES = {
+    DEFAULT: {
+        id: 'default',
+        name: 'Classic',
+        unlockLevel: 1,
+        description: 'Standard fading trail'
+    },
+    FIRE_TRAIL: {
+        id: 'fire_trail',
+        name: 'Fire Trail',
+        unlockLevel: 4,
+        description: 'Orange/red particle flame',
+        colors: [0xff4400, 0xff8800, 0xffaa00, 0xff2200],
+        minSize: 2,
+        maxSize: 5
+    },
+    ICE_TRAIL: {
+        id: 'ice_trail',
+        name: 'Ice Trail',
+        unlockLevel: 6,
+        description: 'Blue/white crystalline particles',
+        colors: [0x88ccff, 0xaaddff, 0xffffff, 0x4488ff],
+        minSize: 1,
+        maxSize: 4
+    },
+    RAINBOW_TRAIL: {
+        id: 'rainbow_trail',
+        name: 'Rainbow Trail',
+        unlockLevel: 8,
+        description: 'Cycling rainbow dots',
+        colors: [0xff0000, 0xff8800, 0xffff00, 0x00ff00, 0x0088ff, 0x8800ff, 0xff00ff],
+        minSize: 2,
+        maxSize: 4
+    },
+    STAR_TRAIL: {
+        id: 'star_trail',
+        name: 'Star Trail',
+        unlockLevel: 10,
+        description: 'Tiny twinkling star shapes',
+        colors: [0xffd700, 0xffff00, 0xffffff],
+        minSize: 2,
+        maxSize: 5,
+        shape: 'square'
+    }
+};
+
+// Enemy Bestiary Descriptions
+export const ENEMY_DESCRIPTIONS = {
+    [ENEMY_TYPES.SCOUT]: {
+        name: 'Scout',
+        description: 'A fast little troublemaker. Easy to squash!',
+        abilities: 'Fast movement'
+    },
+    [ENEMY_TYPES.FIGHTER]: {
+        name: 'Fighter',
+        description: 'Shoots back! Watch out for red bullets.',
+        abilities: 'Shoots projectiles'
+    },
+    [ENEMY_TYPES.BOMBER]: {
+        name: 'Bomber',
+        description: 'Big and slow, but hits HARD.',
+        abilities: 'Drops bombs, high damage'
+    },
+    [ENEMY_TYPES.ELITE]: {
+        name: 'Elite',
+        description: 'The toughest regular enemy. Has a shield!',
+        abilities: 'Shield, high HP'
+    },
+    [ENEMY_TYPES.SPLITTER]: {
+        name: 'Splitter',
+        description: 'Kill it and it splits into two! Sneaky.',
+        abilities: 'Splits on death'
+    },
+    'mini_boss': {
+        name: 'Mini-Boss',
+        description: 'A tough mid-wave challenger. Worth the fight!',
+        abilities: 'High HP, drops power-ups'
+    }
+};

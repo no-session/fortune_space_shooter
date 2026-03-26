@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_CONFIG, SHIP_SKINS, WEAPON_TYPES, WEAPON_CONFIG } from '../utils/constants.js';
+import { GAME_CONFIG, SHIP_SKINS, WEAPON_TYPES, WEAPON_CONFIG, TRAIL_STYLES } from '../utils/constants.js';
 
 export default class Player extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y) {
@@ -20,6 +20,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         // Trail effect
         this.trailSprites = [];
         this.trailFrameCount = 0;
+        this.trailStyleId = localStorage.getItem('fortune-selected-trail') || 'default';
+        this.trailParticles = []; // for particle-based trails
         
         // Player stats
         this.health = GAME_CONFIG.PLAYER_HEALTH;
@@ -129,7 +131,15 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         const speed = Math.abs(this.body.velocity.x) + Math.abs(this.body.velocity.y);
         if (speed < 50) return;
 
-        // Create trail sprite
+        const style = this._getTrailStyle();
+
+        // Particle-based trail styles
+        if (style && style.colors) {
+            this._spawnParticleTrail(style);
+            return;
+        }
+
+        // Default: fading ship copies
         const trail = this.scene.add.image(this.x, this.y, this.currentFrame);
         trail.setScale(this.scaleX);
         trail.setDepth(99);
@@ -165,6 +175,55 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         while (this.trailSprites.length > 8) {
             const old = this.trailSprites.shift();
             if (old) old.destroy();
+        }
+    }
+
+    _getTrailStyle() {
+        const styleId = this.trailStyleId;
+        for (const key of Object.keys(TRAIL_STYLES)) {
+            if (TRAIL_STYLES[key].id === styleId) return TRAIL_STYLES[key];
+        }
+        return null;
+    }
+
+    _spawnParticleTrail(style) {
+        const count = 2;
+        for (let i = 0; i < count; i++) {
+            const color = Phaser.Utils.Array.GetRandom(style.colors);
+            const size = Phaser.Math.FloatBetween(style.minSize || 1, style.maxSize || 4);
+            const offsetX = Phaser.Math.Between(-8, 8);
+            const offsetY = Phaser.Math.Between(10, 25);
+
+            let particle;
+            if (style.shape === 'square') {
+                particle = this.scene.add.rectangle(this.x + offsetX, this.y + offsetY, size * 2, size * 2, color);
+                particle.rotation = Math.random() * Math.PI;
+            } else {
+                particle = this.scene.add.circle(this.x + offsetX, this.y + offsetY, size, color);
+            }
+            particle.setDepth(99);
+            particle.setAlpha(0.8);
+
+            this.trailParticles.push(particle);
+
+            this.scene.tweens.add({
+                targets: particle,
+                alpha: 0,
+                scale: 0.2,
+                y: particle.y + Phaser.Math.Between(15, 40),
+                duration: Phaser.Math.Between(150, 350),
+                onComplete: () => {
+                    particle.destroy();
+                    const idx = this.trailParticles.indexOf(particle);
+                    if (idx >= 0) this.trailParticles.splice(idx, 1);
+                }
+            });
+        }
+
+        // Limit particles
+        while (this.trailParticles.length > 20) {
+            const old = this.trailParticles.shift();
+            if (old && old.active) old.destroy();
         }
     }
 
@@ -869,9 +928,13 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
             this.rainbowTween.destroy();
             this.rainbowTween = null;
         }
-        // Clean up trail sprites
+        // Clean up trail sprites and particles
         this.trailSprites.forEach(t => { if (t) t.destroy(); });
         this.trailSprites = [];
+        if (this.trailParticles) {
+            this.trailParticles.forEach(p => { if (p && p.active) p.destroy(); });
+            this.trailParticles = [];
+        }
 
         if (this.exhaust) {
             this.exhaust.destroy();

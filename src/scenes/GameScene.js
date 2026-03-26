@@ -21,6 +21,8 @@ import TouchControls from '../ui/TouchControls.js';
 import ScreenWipe from '../effects/ScreenWipe.js';
 import Pet from '../entities/Pet.js';
 import MusicManager from '../managers/MusicManager.js';
+import StatsTracker from '../managers/StatsTracker.js';
+import ParticleEngine from '../systems/ParticleEngine.js';
 import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS, WEAPON_TYPES, WEAPON_CONFIG, WEAPON_UPGRADE_NAMES, HAZARD_TYPES, HAZARD_CONFIG, DRONE_CONFIG, PET_TYPES, PET_CONFIG, ACHIEVEMENT_REWARDS, WEATHER_TYPES, WEATHER_CONFIG, MINI_BOSS_CONFIG } from '../utils/constants.js';
 
 export default class GameScene extends Phaser.Scene {
@@ -118,7 +120,8 @@ export default class GameScene extends Phaser.Scene {
             window.chatBox.startPolling();
         }
 
-        // Initialize particle emitter for effects
+        // Initialize particle engine and legacy emitter
+        this.particleEngine = new ParticleEngine(this);
         this.particleEmitter = null;
 
         // Random event manager
@@ -536,6 +539,7 @@ export default class GameScene extends Phaser.Scene {
                 if (this.achievementManager) this.achievementManager.onCollectibleCollected();
                 if (this.bonusStageActive) this.bonusStageCollected++;
                 if (type === COLLECTIBLE_TYPES.COIN || type === COLLECTIBLE_TYPES.FORTUNE_COIN) this.dailyChallengeCoins++;
+                StatsTracker.recordCollectible(type);
                 this.updateUI();
 
                 // Collect the item (handles effects and destruction)
@@ -1511,6 +1515,10 @@ export default class GameScene extends Phaser.Scene {
         this.totalKills++;
         this.checkKillMilestone();
 
+        // Stats tracking
+        StatsTracker.recordEnemyKill(enemy.type);
+        StatsTracker.recordEncounter(enemy.type);
+
         // Achievement tracking
         if (this.achievementManager) {
             this.achievementManager.onEnemyKilled();
@@ -1780,6 +1788,7 @@ export default class GameScene extends Phaser.Scene {
     applyPowerUp(type) {
         const config = POWERUP_CONFIG[type];
         this.powerupsCollected++;
+        StatsTracker.recordPowerUpUsed(type);
 
         // Camera zoom pulse on power-up collect
         this.cameraZoomPulse();
@@ -2393,6 +2402,17 @@ export default class GameScene extends Phaser.Scene {
             this._xpResult = xpResult;
         }
 
+        // Persistent stats tracking
+        StatsTracker.recordGamePlayed();
+        StatsTracker.recordScoreEarned(finalScore);
+        StatsTracker.updateHighestSingleScore(finalScore);
+        StatsTracker.updateHighestWave(this.waveManager.getCurrentWave());
+        StatsTracker.updateHighestCombo(this.scoreManager.getMaxCombo());
+        StatsTracker.recordTimePlayed(Math.floor((Date.now() - this.gameStartTime) / 1000));
+        StatsTracker.recordWeaponUsed(this.player.currentWeapon);
+        const selectedPet = localStorage.getItem('fortune-selected-pet');
+        if (selectedPet) StatsTracker.recordPetUsed(selectedPet);
+
         // Gather all stats (store for deferred launch)
         this._gameOverData = {
             score: finalScore,
@@ -2970,6 +2990,7 @@ export default class GameScene extends Phaser.Scene {
     // --- AUTO-DIFFICULTY ADJUSTMENT (hidden) ---
     onPlayerDeath() {
         this.deathsThisWave++;
+        StatsTracker.recordDeath();
         if (this.deathsThisWave >= 3 && !this.autoDifficultyActive) {
             this.autoDifficultyActive = true;
             this.autoDifficultyEnemySpeedMod = 0.85; // 15% slower bullets
@@ -2995,6 +3016,7 @@ export default class GameScene extends Phaser.Scene {
 
     onPerfectWave() {
         this.perfectWaveStreak++;
+        StatsTracker.recordPerfectWave();
         if (this.perfectWaveStreak >= 1) {
             this.nextWaveSpeedBoost = 1.1; // 10% faster enemies next wave
         }

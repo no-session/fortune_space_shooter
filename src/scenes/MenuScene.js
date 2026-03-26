@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import ChatBox from '../ui/ChatBox.js';
 import DailyChallenge from '../managers/DailyChallenge.js';
 import XPManager from '../managers/XPManager.js';
-import { SHIP_SKINS, DIFFICULTY_MODES, PET_TYPES, PET_CONFIG } from '../utils/constants.js';
+import { SHIP_SKINS, DIFFICULTY_MODES, PET_TYPES, PET_CONFIG, TRAIL_STYLES, ENEMY_TYPES, ENEMY_STATS, ENEMY_DESCRIPTIONS } from '../utils/constants.js';
+import StatsTracker from '../managers/StatsTracker.js';
 
 export default class MenuScene extends Phaser.Scene {
     constructor() {
@@ -484,13 +485,27 @@ export default class MenuScene extends Phaser.Scene {
             () => this.showPetsOverlay()
         );
 
+        // CHALLENGE MODE button
+        this.createRetroButton(
+            width / 2,
+            buttonY + 115,
+            'CHALLENGE MODE',
+            0xff00ff,
+            () => this.fadeToScene('ChallengeSelectScene')
+        );
+
+        // Row of small buttons
+        this.createSmallButton(width / 2 - 130, buttonY + 165, 'STATS', 0x44aaff, () => this.showStatsOverlay());
+        this.createSmallButton(width / 2, buttonY + 165, 'BESTIARY', 0xff8844, () => this.showBestiaryOverlay());
+        this.createSmallButton(width / 2 + 130, buttonY + 165, 'TRAILS', 0x44ff88, () => this.showTrailsOverlay());
+
         // HOW TO PLAY button
-        this.createSmallButton(width / 2, buttonY + 165, 'HOW TO PLAY', 0x00ff88, () => {
+        this.createSmallButton(width / 2, buttonY + 200, 'HOW TO PLAY', 0x00ff88, () => {
             this.showTutorial();
         });
 
         // STORY replay button (small)
-        this.createSmallButton(width / 2 - 80, buttonY + 200, 'STORY', 0x8844ff, () => {
+        this.createSmallButton(width / 2 - 80, buttonY + 235, 'STORY', 0x8844ff, () => {
             this.fadeToScene('IntroScene', { replay: true });
         });
 
@@ -498,7 +513,7 @@ export default class MenuScene extends Phaser.Scene {
         const soundLevel = localStorage.getItem('fortune-sound-level') || 'HIGH';
         const soundLabel = soundLevel === 'OFF' ? 'SOUND OFF' : soundLevel === 'LOW' ? 'SOUND LOW' : 'SOUND ON';
         this.soundBtnText = null;
-        this.createSmallButton(width / 2 + 80, buttonY + 200, soundLabel, 0x44aa44, () => {
+        this.createSmallButton(width / 2 + 80, buttonY + 235, soundLabel, 0x44aa44, () => {
             this.cycleSoundLevel();
         }, (txt) => { this.soundBtnText = txt; });
 
@@ -2077,6 +2092,319 @@ export default class MenuScene extends Phaser.Scene {
 
         closeBtn.on('pointerover', () => { closeBtn.setFillStyle(0x223344); this.playHoverSound(); });
         closeBtn.on('pointerout', () => { closeBtn.setFillStyle(0x111122); });
+        closeBtn.on('pointerdown', () => {
+            this.playClickSound();
+            elements.forEach(el => { if (el && el.destroy) el.destroy(); });
+        });
+    }
+
+    // ── STATS OVERLAY ─────────────────────────────────────
+
+    showStatsOverlay() {
+        const width = this.scale.width;
+        const height = this.scale.height;
+        const elements = [];
+
+        // Overlay
+        const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.9);
+        overlay.setDepth(3000);
+        elements.push(overlay);
+
+        // Panel
+        const panel = this.add.rectangle(width / 2, height / 2, 600, 500, 0x0a0a1a);
+        panel.setStrokeStyle(3, 0x44aaff);
+        panel.setDepth(3001);
+        elements.push(panel);
+
+        // Title
+        const title = this.add.text(width / 2, height / 2 - 220, 'ALL-TIME STATISTICS', {
+            fontSize: '26px', fontFamily: 'monospace', color: '#44aaff',
+            stroke: '#000000', strokeThickness: 2
+        }).setOrigin(0.5).setDepth(3002);
+        elements.push(title);
+
+        const stats = StatsTracker.getAllStats();
+        const lines = [
+            { label: 'Games Played', value: stats.gamesPlayed.toLocaleString(), color: '#ffffff' },
+            { label: 'Total Score', value: stats.totalScore.toLocaleString(), color: '#ffd700' },
+            { label: 'Highest Single Score', value: stats.highestSingleScore.toLocaleString(), color: '#ffd700' },
+            { label: 'Enemies Killed', value: `${stats.enemiesKilled.toLocaleString()} (${stats.killComparison})`, color: '#ff4444' },
+            { label: 'Bosses Defeated', value: stats.bossesDefeated.toLocaleString(), color: '#ff8888' },
+            { label: 'Collectibles', value: stats.collectibles.toLocaleString(), color: '#ffff00' },
+            { label: 'Power-ups Used', value: stats.powerUpsUsed.toLocaleString(), color: '#88ff88' },
+            { label: 'Highest Wave', value: stats.highestWave.toString(), color: '#00ffff' },
+            { label: 'Highest Combo', value: `${stats.highestCombo}x`, color: '#ffaa00' },
+            { label: 'Perfect Waves', value: stats.perfectWaves.toString(), color: '#00ff00' },
+            { label: 'Total Deaths', value: stats.deaths.toLocaleString(), color: '#ff6666' },
+            { label: 'Time Played', value: StatsTracker.formatTime(stats.timePlayed), color: '#aaaaaa' },
+            { label: 'Favorite Weapon', value: stats.favoriteWeapon || 'N/A', color: '#00ffff' },
+            { label: 'Favorite Pet', value: stats.favoritePet || 'N/A', color: '#ff88ff' },
+        ];
+
+        const startY = height / 2 - 185;
+        const lineH = 27;
+        lines.forEach((line, i) => {
+            const y = startY + i * lineH;
+            const labelText = this.add.text(width / 2 - 260, y, line.label, {
+                fontSize: '13px', fontFamily: 'monospace', color: '#888899'
+            }).setDepth(3002);
+            elements.push(labelText);
+
+            const valText = this.add.text(width / 2 + 260, y, line.value, {
+                fontSize: '13px', fontFamily: 'monospace', color: line.color
+            }).setOrigin(1, 0).setDepth(3002);
+            elements.push(valText);
+        });
+
+        // Close button
+        const closeBtn = this.add.rectangle(width / 2, height / 2 + 220, 120, 40, 0x111122);
+        closeBtn.setStrokeStyle(2, 0x44aaff);
+        closeBtn.setInteractive({ useHandCursor: true });
+        closeBtn.setDepth(3002);
+        elements.push(closeBtn);
+
+        const closeTxt = this.add.text(width / 2, height / 2 + 220, 'CLOSE', {
+            fontSize: '16px', fontFamily: 'monospace', color: '#44aaff'
+        }).setOrigin(0.5).setDepth(3003);
+        elements.push(closeTxt);
+
+        closeBtn.on('pointerover', () => { closeBtn.setFillStyle(0x223344); this.playHoverSound(); });
+        closeBtn.on('pointerout', () => closeBtn.setFillStyle(0x111122));
+        closeBtn.on('pointerdown', () => {
+            this.playClickSound();
+            elements.forEach(el => { if (el && el.destroy) el.destroy(); });
+        });
+    }
+
+    // ── BESTIARY OVERLAY ──────────────────────────────────
+
+    showBestiaryOverlay() {
+        const width = this.scale.width;
+        const height = this.scale.height;
+        const elements = [];
+
+        // Overlay
+        const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.9);
+        overlay.setDepth(3000);
+        elements.push(overlay);
+
+        // Panel
+        const panel = this.add.rectangle(width / 2, height / 2, 600, 500, 0x0a0a1a);
+        panel.setStrokeStyle(3, 0xff8844);
+        panel.setDepth(3001);
+        elements.push(panel);
+
+        // Title
+        const titleTxt = this.add.text(width / 2, height / 2 - 220, 'ENEMY BESTIARY', {
+            fontSize: '26px', fontFamily: 'monospace', color: '#ff8844',
+            stroke: '#000000', strokeThickness: 2
+        }).setOrigin(0.5).setDepth(3002);
+        elements.push(titleTxt);
+
+        const encounters = StatsTracker.getEncounters();
+        const enemyKills = StatsTracker.enemiesByType;
+
+        // All enemy types + mini_boss
+        const allTypes = [...Object.values(ENEMY_TYPES), 'mini_boss'];
+        const startY = height / 2 - 175;
+        const cardH = 60;
+        const gap = 6;
+
+        allTypes.forEach((type, i) => {
+            const y = startY + i * (cardH + gap);
+            const encountered = encounters[type] > 0;
+            const killed = enemyKills[type] || 0;
+            const desc = ENEMY_DESCRIPTIONS[type];
+            const stats = ENEMY_STATS[type];
+
+            // Card bg
+            const card = this.add.rectangle(width / 2, y, 540, cardH, 0x111122);
+            card.setStrokeStyle(1, encountered ? 0xff8844 : 0x333333);
+            card.setDepth(3002);
+            elements.push(card);
+
+            if (encountered && desc) {
+                // Enemy icon (sprite if available)
+                const spriteKey = `enemy_${type}_m`;
+                if (this.textures.exists(spriteKey)) {
+                    const icon = this.add.image(width / 2 - 240, y, spriteKey);
+                    icon.setScale(1.5);
+                    icon.setDepth(3003);
+                    elements.push(icon);
+                }
+
+                // Name
+                const nameText = this.add.text(width / 2 - 200, y - 15, desc.name.toUpperCase(), {
+                    fontSize: '16px', fontFamily: 'monospace', color: '#ff8844', fontStyle: 'bold'
+                }).setDepth(3003);
+                elements.push(nameText);
+
+                // Description
+                const descText = this.add.text(width / 2 - 200, y + 5, desc.description, {
+                    fontSize: '11px', fontFamily: 'monospace', color: '#999999'
+                }).setDepth(3003);
+                elements.push(descText);
+
+                // Stats bar
+                if (stats) {
+                    const statsStr = `HP: ${stats.health}  SPD: ${stats.speed}  PTS: ${stats.points}`;
+                    const statsTxt = this.add.text(width / 2 + 80, y - 15, statsStr, {
+                        fontSize: '10px', fontFamily: 'monospace', color: '#666688'
+                    }).setDepth(3003);
+                    elements.push(statsTxt);
+                }
+
+                // Kill count
+                const killText = this.add.text(width / 2 + 240, y + 5, `Defeated: ${killed}`, {
+                    fontSize: '11px', fontFamily: 'monospace', color: '#aaaaaa'
+                }).setOrigin(1, 0).setDepth(3003);
+                elements.push(killText);
+
+                // Abilities
+                const abilText = this.add.text(width / 2 + 240, y - 15, desc.abilities, {
+                    fontSize: '10px', fontFamily: 'monospace', color: '#44ff88'
+                }).setOrigin(1, 0).setDepth(3003);
+                elements.push(abilText);
+            } else {
+                // Unknown enemy — show silhouette
+                const unknownText = this.add.text(width / 2, y, '??? — Not Yet Encountered', {
+                    fontSize: '14px', fontFamily: 'monospace', color: '#444444'
+                }).setOrigin(0.5).setDepth(3003);
+                elements.push(unknownText);
+            }
+        });
+
+        // Close button
+        const closeBtn = this.add.rectangle(width / 2, height / 2 + 220, 120, 40, 0x111122);
+        closeBtn.setStrokeStyle(2, 0xff8844);
+        closeBtn.setInteractive({ useHandCursor: true });
+        closeBtn.setDepth(3002);
+        elements.push(closeBtn);
+
+        const closeTxt = this.add.text(width / 2, height / 2 + 220, 'CLOSE', {
+            fontSize: '16px', fontFamily: 'monospace', color: '#ff8844'
+        }).setOrigin(0.5).setDepth(3003);
+        elements.push(closeTxt);
+
+        closeBtn.on('pointerover', () => { closeBtn.setFillStyle(0x223344); this.playHoverSound(); });
+        closeBtn.on('pointerout', () => closeBtn.setFillStyle(0x111122));
+        closeBtn.on('pointerdown', () => {
+            this.playClickSound();
+            elements.forEach(el => { if (el && el.destroy) el.destroy(); });
+        });
+    }
+
+    // ── TRAILS OVERLAY ────────────────────────────────────
+
+    showTrailsOverlay() {
+        const width = this.scale.width;
+        const height = this.scale.height;
+        const elements = [];
+
+        const xpManager = new XPManager();
+        const playerLevel = xpManager.getLevel();
+        const selectedTrail = localStorage.getItem('fortune-selected-trail') || 'default';
+
+        // Overlay
+        const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.85);
+        overlay.setDepth(2000);
+        elements.push(overlay);
+
+        // Panel
+        const panel = this.add.rectangle(width / 2, height / 2, 500, 420, 0x0a0a1a);
+        panel.setStrokeStyle(3, 0x44ff88);
+        panel.setDepth(2001);
+        elements.push(panel);
+
+        // Title
+        const titleTxt = this.add.text(width / 2, height / 2 - 180, 'SHIP TRAILS', {
+            fontSize: '28px', fontFamily: 'monospace', color: '#44ff88',
+            stroke: '#000000', strokeThickness: 2
+        }).setOrigin(0.5).setDepth(2002);
+        elements.push(titleTxt);
+
+        const trailKeys = Object.keys(TRAIL_STYLES);
+        const startY = height / 2 - 130;
+        const rowH = 55;
+
+        trailKeys.forEach((key, i) => {
+            const style = TRAIL_STYLES[key];
+            const y = startY + i * rowH;
+            const unlocked = playerLevel >= style.unlockLevel;
+            const isSelected = style.id === selectedTrail;
+
+            // Row bg
+            const rowBg = this.add.rectangle(width / 2, y, 440, 45, isSelected ? 0x1a2a2a : 0x111122);
+            rowBg.setStrokeStyle(2, isSelected ? 0x44ff88 : (unlocked ? 0x333355 : 0x222222));
+            rowBg.setDepth(2002);
+            elements.push(rowBg);
+
+            // Color preview dots
+            if (style.colors) {
+                for (let c = 0; c < Math.min(style.colors.length, 5); c++) {
+                    const dot = this.add.circle(width / 2 - 190 + c * 14, y, 5, style.colors[c], unlocked ? 0.9 : 0.3);
+                    dot.setDepth(2003);
+                    elements.push(dot);
+                }
+            } else {
+                // Default trail — show a faded ship icon
+                const dot = this.add.circle(width / 2 - 190, y, 5, 0xffffff, 0.5);
+                dot.setDepth(2003);
+                elements.push(dot);
+            }
+
+            // Name
+            const nameColor = unlocked ? '#ffffff' : '#555555';
+            const nameTxt = this.add.text(width / 2 - 100, y - 8, style.name, {
+                fontSize: '16px', fontFamily: 'monospace', color: nameColor, fontStyle: 'bold'
+            }).setDepth(2003);
+            elements.push(nameTxt);
+
+            // Description
+            const descColor = unlocked ? '#888899' : '#444444';
+            const descTxt = this.add.text(width / 2 - 100, y + 10, style.description, {
+                fontSize: '11px', fontFamily: 'monospace', color: descColor
+            }).setDepth(2003);
+            elements.push(descTxt);
+
+            // Status
+            let statusStr = '';
+            if (isSelected) statusStr = 'EQUIPPED';
+            else if (!unlocked) statusStr = `Unlock at Lv.${style.unlockLevel}`;
+            const statusColor = isSelected ? '#44ff88' : '#666666';
+            const statusTxt = this.add.text(width / 2 + 200, y, statusStr, {
+                fontSize: '12px', fontFamily: 'monospace', color: statusColor
+            }).setOrigin(1, 0.5).setDepth(2003);
+            elements.push(statusTxt);
+
+            // Click to select
+            if (unlocked && !isSelected) {
+                rowBg.setInteractive({ useHandCursor: true });
+                rowBg.on('pointerover', () => { rowBg.setFillStyle(0x223344); this.playHoverSound(); });
+                rowBg.on('pointerout', () => rowBg.setFillStyle(0x111122));
+                rowBg.on('pointerdown', () => {
+                    this.playClickSound();
+                    localStorage.setItem('fortune-selected-trail', style.id);
+                    elements.forEach(el => { if (el && el.destroy) el.destroy(); });
+                    this.showTrailsOverlay();
+                });
+            }
+        });
+
+        // Close button
+        const closeBtn = this.add.rectangle(width / 2, height / 2 + 180, 120, 40, 0x111122);
+        closeBtn.setStrokeStyle(2, 0x44ff88);
+        closeBtn.setInteractive({ useHandCursor: true });
+        closeBtn.setDepth(2002);
+        elements.push(closeBtn);
+
+        const closeTxt = this.add.text(width / 2, height / 2 + 180, 'CLOSE', {
+            fontSize: '16px', fontFamily: 'monospace', color: '#44ff88'
+        }).setOrigin(0.5).setDepth(2003);
+        elements.push(closeTxt);
+
+        closeBtn.on('pointerover', () => { closeBtn.setFillStyle(0x223344); this.playHoverSound(); });
+        closeBtn.on('pointerout', () => closeBtn.setFillStyle(0x111122));
         closeBtn.on('pointerdown', () => {
             this.playClickSound();
             elements.forEach(el => { if (el && el.destroy) el.destroy(); });
