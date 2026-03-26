@@ -18,6 +18,7 @@ import XPManager from '../managers/XPManager.js';
 import BonusSystem from '../systems/BonusSystem.js';
 import DailyChallenge from '../managers/DailyChallenge.js';
 import TouchControls from '../ui/TouchControls.js';
+import ScreenWipe from '../effects/ScreenWipe.js';
 import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS, WEAPON_TYPES, WEAPON_CONFIG, HAZARD_TYPES, HAZARD_CONFIG, DRONE_CONFIG } from '../utils/constants.js';
 
 export default class GameScene extends Phaser.Scene {
@@ -128,6 +129,28 @@ export default class GameScene extends Phaser.Scene {
         if (this.xpManager.startsWithShield()) {
             this.applyPowerUp(POWERUP_TYPES.SHIELD);
         }
+
+        // Konami code: apply all power-ups for 30 seconds
+        if (sessionStorage.getItem('fortune-konami-activated') === 'true') {
+            sessionStorage.removeItem('fortune-konami-activated');
+            this.time.delayedCall(500, () => {
+                this.applyPowerUp(POWERUP_TYPES.SHIELD);
+                this.applyPowerUp(POWERUP_TYPES.RAPID_FIRE);
+                this.applyPowerUp(POWERUP_TYPES.MAGNET);
+                this.effectManager.showScorePopup(
+                    this.scale.width / 2, this.scale.height / 2,
+                    'ALL POWER-UPS!', { color: '#ff00ff', size: '28px', prefix: '' }
+                );
+            });
+        }
+
+        // High score tracking for real-time celebration
+        this.personalBest = this.getPersonalBest();
+        this.highScoreBeaten = false;
+
+        // Magnet beam graphics
+        this.magnetGraphics = this.add.graphics();
+        this.magnetGraphics.setDepth(95);
 
         // Game session tracking
         this.gameStartTime = Date.now();
@@ -1115,6 +1138,12 @@ export default class GameScene extends Phaser.Scene {
         // --- UPDATE EDGE WARNINGS ---
         this.updateEdgeWarnings();
 
+        // --- MAGNET TRACTOR BEAM VISUALS ---
+        this.updateMagnetBeams();
+
+        // --- HIGH SCORE REAL-TIME CHECK ---
+        this.checkHighScoreLive();
+
         // --- UPDATE RADAR ---
         this.updateRadar();
 
@@ -1456,7 +1485,7 @@ export default class GameScene extends Phaser.Scene {
 
         this.updateUI();
 
-        // Fade out and start next wave after delay
+        // Fade out wave complete text
         this.tweens.add({
             targets: waveText,
             alpha: 0,
@@ -1481,32 +1510,34 @@ export default class GameScene extends Phaser.Scene {
                     this.achievementManager.onWaveStart(nextWaveNum);
                 }
 
-                // If boss wave, go to shop, then possibly bonus stage
-                if (this.waveManager.isBossWave()) {
-                    // Start the next wave first to prevent re-triggering
-                    this.waveManager.startWave(nextWaveNum);
-                    this.bonusSystem.startWave(nextWaveNum);
-                    this.showWaveNameDisplay(nextWaveNum);
-                    this.waveTransitioning = false;
+                // Screen wipe transition, then countdown, then spawn
+                ScreenWipe.random(this, 800, () => {
+                    // If boss wave, go to shop, then possibly bonus stage
+                    if (this.waveManager.isBossWave()) {
+                        this.waveManager.startWave(nextWaveNum);
+                        this.bonusSystem.startWave(nextWaveNum);
+                        this.showWaveNameDisplay(nextWaveNum);
+                        this.waveTransitioning = false;
 
-                    // Then launch shop
-                    this.scene.pause();
-                    this.scene.launch('ShopScene', {
-                        score: this.scoreManager.getScore(),
-                        wave: currentWave
-                    });
+                        this.scene.pause();
+                        this.scene.launch('ShopScene', {
+                            score: this.scoreManager.getScore(),
+                            wave: currentWave
+                        });
 
-                    // Bonus stage every 10 waves (after boss + shop)
-                    if (currentWave % 10 === 0) {
-                        this._pendingBonusStage = true;
+                        if (currentWave % 10 === 0) {
+                            this._pendingBonusStage = true;
+                        }
+                    } else {
+                        // Show countdown then start wave
+                        this.showWaveCountdown(() => {
+                            this.waveManager.startWave(nextWaveNum);
+                            this.bonusSystem.startWave(nextWaveNum);
+                            this.showWaveNameDisplay(nextWaveNum);
+                            this.waveTransitioning = false;
+                        });
                     }
-                } else {
-                    // Start next wave
-                    this.waveManager.startWave(nextWaveNum);
-                    this.bonusSystem.startWave(nextWaveNum);
-                    this.showWaveNameDisplay(nextWaveNum);
-                    this.waveTransitioning = false;
-                }
+                });
             }
         });
     }
@@ -2146,6 +2177,12 @@ export default class GameScene extends Phaser.Scene {
             this.touchControls = null;
         }
 
+        // Clean up magnet graphics
+        if (this.magnetGraphics) {
+            this.magnetGraphics.destroy();
+            this.magnetGraphics = null;
+        }
+
         // Clean up hazards
         this.hazards.forEach(h => { if (h) h.destroy(); });
         this.hazards = [];
@@ -2257,6 +2294,247 @@ export default class GameScene extends Phaser.Scene {
                 });
             }
         }
+    }
+
+    // --- MAGNET TRACTOR BEAM VISUALS ---
+    updateMagnetBeams() {
+        if (!this.magnetGraphics) return;
+        this.magnetGraphics.clear();
+
+        if (!this.player || !this.player.magnetActive || !this.player.active) return;
+
+        const px = this.player.x;
+        const py = this.player.y;
+        const magnetRange = this.player.getMagnetRange();
+
+        this.collectibles.children.entries.forEach(c => {
+            if (!c || !c.active || c.collected) return;
+            const dist = Phaser.Math.Distance.Between(c.x, c.y, px, py);
+            if (dist < magnetRange) {
+                // Brighter as collectible gets closer
+                const alpha = 0.05 + 0.15 * (1 - dist / magnetRange);
+                this.magnetGraphics.lineStyle(1, 0xffffff, alpha);
+                this.magnetGraphics.beginPath();
+                this.magnetGraphics.moveTo(c.x, c.y);
+                this.magnetGraphics.lineTo(px, py);
+                this.magnetGraphics.closePath();
+                this.magnetGraphics.strokePath();
+            }
+        });
+    }
+
+    // --- HIGH SCORE REAL-TIME CHECK ---
+    getPersonalBest() {
+        const scores = JSON.parse(localStorage.getItem('fortune_leaderboard') || '[]');
+        return scores.length > 0 ? Math.max(...scores) : 0;
+    }
+
+    checkHighScoreLive() {
+        if (this.highScoreBeaten) return;
+        const currentScore = this.scoreManager.getScore();
+        if (this.personalBest > 0 && currentScore > this.personalBest) {
+            this.highScoreBeaten = true;
+            this.showNewHighScore();
+        }
+    }
+
+    showNewHighScore() {
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2 - 50;
+
+        const text = this.add.text(centerX, centerY, 'NEW HIGH SCORE!', {
+            fontSize: '36px',
+            fontFamily: 'monospace',
+            color: '#ffd700',
+            stroke: '#000000',
+            strokeThickness: 5,
+            fontStyle: 'bold'
+        });
+        text.setOrigin(0.5);
+        text.setDepth(1010);
+        text.setAlpha(0);
+
+        // Flash animation
+        this.tweens.add({
+            targets: text,
+            alpha: 1,
+            scale: { from: 2.5, to: 1 },
+            duration: 400,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                // Flashing effect
+                this.tweens.add({
+                    targets: text,
+                    alpha: { from: 1, to: 0.3 },
+                    duration: 300,
+                    yoyo: true,
+                    repeat: 4,
+                    onComplete: () => {
+                        this.tweens.add({
+                            targets: text,
+                            alpha: 0,
+                            y: centerY - 40,
+                            duration: 500,
+                            onComplete: () => text.destroy()
+                        });
+                    }
+                });
+            }
+        });
+
+        // Confetti burst
+        this.spawnConfetti();
+        this.effectManager.screenShake({ duration: 400, intensity: 0.015 });
+    }
+
+    // --- WAVE COUNTDOWN ---
+    showWaveCountdown(callback) {
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2;
+        const numbers = ['3', '2', '1', 'GO!'];
+
+        numbers.forEach((num, index) => {
+            this.time.delayedCall(index * 800, () => {
+                const isGo = num === 'GO!';
+                const color = isGo ? '#00ff00' : '#ffffff';
+                const fontSize = isGo ? '56px' : '64px';
+
+                const text = this.add.text(centerX, centerY, num, {
+                    fontSize: fontSize,
+                    fontFamily: 'monospace',
+                    color: color,
+                    stroke: '#000000',
+                    strokeThickness: 6,
+                    fontStyle: 'bold'
+                });
+                text.setOrigin(0.5);
+                text.setDepth(1010);
+
+                // Scale down and fade
+                this.tweens.add({
+                    targets: text,
+                    scale: { from: 1.5, to: 0.5 },
+                    alpha: { from: 1, to: 0 },
+                    duration: 700,
+                    ease: 'Power2',
+                    onComplete: () => text.destroy()
+                });
+
+                // Green burst effect on GO!
+                if (isGo) {
+                    const burst = this.add.circle(centerX, centerY, 20, 0x00ff00, 0.5);
+                    burst.setDepth(1009);
+                    this.tweens.add({
+                        targets: burst,
+                        scale: 8,
+                        alpha: 0,
+                        duration: 500,
+                        onComplete: () => burst.destroy()
+                    });
+                }
+            });
+        });
+
+        // Callback after countdown completes
+        this.time.delayedCall(numbers.length * 800, () => {
+            if (callback) callback();
+        });
+    }
+
+    // --- FORMATION PREVIEW ---
+    showFormationPreview(formationType, enemyCount, startX, startY, callback) {
+        const previewDots = [];
+
+        // Calculate positions based on formation type (simplified preview)
+        const positions = this.calculateFormationPositions(formationType, enemyCount, startX, startY);
+
+        positions.forEach((pos, i) => {
+            const dot = this.add.circle(pos.x, pos.y, 8, 0xffffff, 0);
+            dot.setStrokeStyle(1, 0x00ffff, 0);
+            dot.setDepth(50);
+            previewDots.push(dot);
+
+            // Fade in with stagger
+            this.tweens.add({
+                targets: dot,
+                fillAlpha: 0.15,
+                strokeAlpha: 0.3,
+                duration: 300,
+                delay: i * 30
+            });
+        });
+
+        // Fade out after 1 second, then callback
+        this.time.delayedCall(800, () => {
+            previewDots.forEach((dot, i) => {
+                this.tweens.add({
+                    targets: dot,
+                    fillAlpha: 0,
+                    strokeAlpha: 0,
+                    duration: 300,
+                    delay: i * 15,
+                    onComplete: () => dot.destroy()
+                });
+            });
+
+            this.time.delayedCall(400, () => {
+                if (callback) callback();
+            });
+        });
+    }
+
+    calculateFormationPositions(type, count, startX, startY) {
+        const positions = [];
+        const spacing = 40;
+
+        switch (type) {
+            case 'v': {
+                const rows = Math.ceil(Math.sqrt(count));
+                let idx = 0;
+                for (let row = 0; row < rows && idx < count; row++) {
+                    const inRow = Math.min(count - idx, row + 1);
+                    const offset = -(inRow - 1) * spacing / 2;
+                    for (let col = 0; col < inRow; col++) {
+                        positions.push({ x: startX + offset + col * spacing, y: startY + row * 30 });
+                        idx++;
+                    }
+                }
+                break;
+            }
+            case 'grid': {
+                const cols = Math.ceil(Math.sqrt(count));
+                for (let i = 0; i < count; i++) {
+                    const col = i % cols;
+                    const row = Math.floor(i / cols);
+                    positions.push({
+                        x: startX + (col - cols / 2) * spacing,
+                        y: startY + row * 35
+                    });
+                }
+                break;
+            }
+            case 'circle': {
+                for (let i = 0; i < count; i++) {
+                    const angle = (Math.PI * 2 * i) / count;
+                    positions.push({
+                        x: startX + Math.cos(angle) * 60,
+                        y: startY + Math.sin(angle) * 60
+                    });
+                }
+                break;
+            }
+            default: {
+                // Wave/spiral: just show a horizontal line
+                for (let i = 0; i < count; i++) {
+                    positions.push({
+                        x: startX + (i - count / 2) * spacing,
+                        y: startY
+                    });
+                }
+                break;
+            }
+        }
+        return positions;
     }
 
     _launchGameOver() {

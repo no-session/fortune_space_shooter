@@ -73,13 +73,29 @@ export default class WaveManager {
 
             this.scene.time.delayedCall(delay, () => {
                 const enemyType = this.getEnemyTypeForWave();
-                formationManager.createFormation(
-                    formationType,
-                    enemyType,
-                    enemyCount,
-                    startX,
-                    startY
-                );
+
+                // Show formation preview before spawning
+                if (this.scene.showFormationPreview) {
+                    // Show preview at visible positions (translate startY to on-screen)
+                    const previewY = 80 + i * 80;
+                    this.scene.showFormationPreview(formationType, enemyCount, startX, previewY, () => {
+                        formationManager.createFormation(
+                            formationType,
+                            enemyType,
+                            enemyCount,
+                            startX,
+                            startY
+                        );
+                    });
+                } else {
+                    formationManager.createFormation(
+                        formationType,
+                        enemyType,
+                        enemyCount,
+                        startX,
+                        startY
+                    );
+                }
             });
         }
     }

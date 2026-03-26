@@ -66,6 +66,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         // Power-up states
         this.shieldHits = 0;
         this.shieldGraphic = null;
+        this.shieldNodes = [];
+        this.shieldAngle = 0;
         this.rapidFire = false;
         this.baseFireRate = this.fireRate;
         this.magnetActive = false;
@@ -321,9 +323,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
             this.exhaust.setPosition(this.x, this.y + 35);
         }
 
-        // Update shield graphic position
-        if (this.shieldGraphic) {
-            this.shieldGraphic.setPosition(this.x, this.y);
+        // Update shield visual
+        if (this.shieldHits > 0) {
+            this.updateShield();
         }
         
         // Shooting
@@ -696,36 +698,120 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         this.speed += 50;
     }
 
-    // Power-up: Shield
+    // Power-up: Shield (hexagonal force field)
     activateShield(hits) {
         this.shieldHits = hits;
+        this.shieldAngle = 0;
+        this.shieldNodes = [];
+
+        // Clean up old shield
         if (this.shieldGraphic) {
             this.shieldGraphic.destroy();
         }
-        this.shieldGraphic = this.scene.add.circle(this.x, this.y, 30, 0x0088ff, 0.25);
-        this.shieldGraphic.setStrokeStyle(2, 0x00aaff, 0.8);
-        this.shieldGraphic.setDepth(101);
+        this.shieldNodes.forEach(n => { if (n) n.destroy(); });
+        this.shieldNodes = [];
+
+        // Create 6 small circles in hexagonal arrangement
+        for (let i = 0; i < 6; i++) {
+            const node = this.scene.add.circle(0, 0, 5, 0x00aaff, 0.7);
+            node.setStrokeStyle(1, 0x00ddff, 0.9);
+            node.setDepth(101);
+            this.shieldNodes.push(node);
+        }
+
+        // Center shield graphic (connecting lines)
+        this.shieldGraphic = this.scene.add.graphics();
+        this.shieldGraphic.setDepth(100);
+    }
+
+    updateShield() {
+        if (this.shieldHits <= 0 || this.shieldNodes.length === 0) return;
+
+        this.shieldAngle += 0.02;
+        const radius = 32;
+        const cracking = this.shieldHits === 1;
+
+        for (let i = 0; i < this.shieldNodes.length; i++) {
+            const angle = this.shieldAngle + (Math.PI * 2 * i) / 6;
+            const nx = this.x + Math.cos(angle) * radius;
+            const ny = this.y + Math.sin(angle) * radius;
+            this.shieldNodes[i].setPosition(nx, ny);
+
+            if (cracking) {
+                // Flicker red when about to break
+                const flicker = Math.sin(this.scene.time.now * 0.02) > 0 ? 0.7 : 0.2;
+                this.shieldNodes[i].setFillStyle(0xff3333, flicker);
+                this.shieldNodes[i].setStrokeStyle(1, 0xff6666, flicker);
+            } else {
+                this.shieldNodes[i].setFillStyle(0x00aaff, 0.7);
+                this.shieldNodes[i].setStrokeStyle(1, 0x00ddff, 0.9);
+            }
+        }
+
+        // Draw connecting lines
+        if (this.shieldGraphic) {
+            this.shieldGraphic.clear();
+            const lineColor = cracking ? 0xff3333 : 0x00aaff;
+            const lineAlpha = cracking ? 0.3 : 0.25;
+            this.shieldGraphic.lineStyle(1, lineColor, lineAlpha);
+            this.shieldGraphic.beginPath();
+            for (let i = 0; i < this.shieldNodes.length; i++) {
+                const node = this.shieldNodes[i];
+                if (i === 0) {
+                    this.shieldGraphic.moveTo(node.x, node.y);
+                } else {
+                    this.shieldGraphic.lineTo(node.x, node.y);
+                }
+            }
+            this.shieldGraphic.closePath();
+            this.shieldGraphic.strokePath();
+        }
     }
 
     absorbShieldHit() {
         if (this.shieldHits <= 0) return false;
         this.shieldHits--;
 
-        // Flash shield
-        if (this.shieldGraphic) {
-            this.shieldGraphic.setFillStyle(0x00aaff, 0.6);
-            this.scene.time.delayedCall(100, () => {
-                if (this.shieldGraphic) {
-                    if (this.shieldHits > 0) {
-                        this.shieldGraphic.setFillStyle(0x0088ff, 0.25);
-                    } else {
-                        this.shieldGraphic.destroy();
-                        this.shieldGraphic = null;
-                    }
-                }
-            });
-        }
+        // Flash shield white on hit
+        this.shieldNodes.forEach(node => {
+            if (node) {
+                node.setFillStyle(0xffffff, 1);
+                node.setStrokeStyle(2, 0xffffff, 1);
+            }
+        });
+
+        this.scene.time.delayedCall(100, () => {
+            if (this.shieldHits <= 0) {
+                // Shield breaks - shatter animation
+                this.shatterShield();
+            }
+        });
+
         return true;
+    }
+
+    shatterShield() {
+        // Fly 6 pieces outward and fade
+        this.shieldNodes.forEach((node, i) => {
+            if (!node) return;
+            const angle = (Math.PI * 2 * i) / 6;
+            this.scene.tweens.add({
+                targets: node,
+                x: node.x + Math.cos(angle) * 60,
+                y: node.y + Math.sin(angle) * 60,
+                alpha: 0,
+                scale: 0.3,
+                duration: 400,
+                ease: 'Power2',
+                onComplete: () => node.destroy()
+            });
+        });
+        this.shieldNodes = [];
+
+        if (this.shieldGraphic) {
+            this.shieldGraphic.destroy();
+            this.shieldGraphic = null;
+        }
     }
 
     // Power-up: Rapid Fire
@@ -766,6 +852,10 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         if (this.shieldGraphic) {
             this.shieldGraphic.destroy();
             this.shieldGraphic = null;
+        }
+        if (this.shieldNodes) {
+            this.shieldNodes.forEach(n => { if (n) n.destroy(); });
+            this.shieldNodes = [];
         }
         if (this.laserGraphic) {
             this.laserGraphic.destroy();

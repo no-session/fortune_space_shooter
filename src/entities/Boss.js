@@ -272,6 +272,61 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
 
         // Visual/audio feedback
         this.createPhaseTransitionEffect();
+
+        // Show dramatic phase name
+        this.showPhaseName(newPhase);
+    }
+
+    showPhaseName(phase) {
+        const phaseNames = {
+            1: 'Calm Before the Storm',
+            2: 'Getting Angry!',
+            3: 'RAGE MODE!'
+        };
+        const name = phaseNames[phase];
+        if (!name) return;
+
+        const centerX = this.scene.scale.width / 2;
+        const centerY = this.scene.scale.height / 2 - 60;
+
+        const color = phase === 3 ? '#ff0000' : phase === 2 ? '#ffaa00' : '#00ffff';
+        const fontSize = phase === 3 ? '36px' : '28px';
+
+        const text = this.scene.add.text(centerX, centerY, name, {
+            fontSize: fontSize,
+            fontFamily: 'monospace',
+            color: color,
+            stroke: '#000000',
+            strokeThickness: 5,
+            fontStyle: 'bold'
+        });
+        text.setOrigin(0.5);
+        text.setDepth(1010);
+        text.setAlpha(0);
+
+        // Phase 3 gets extra screen shake
+        if (phase === 3) {
+            this.scene.cameras.main.shake(500, 0.02);
+        }
+
+        this.scene.tweens.add({
+            targets: text,
+            alpha: 1,
+            scale: { from: 2.5, to: 1 },
+            duration: 400,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.scene.time.delayedCall(1200, () => {
+                    this.scene.tweens.add({
+                        targets: text,
+                        alpha: 0,
+                        y: centerY - 40,
+                        duration: 500,
+                        onComplete: () => text.destroy()
+                    });
+                });
+            }
+        });
     }
 
     createPhaseTransitionEffect() {

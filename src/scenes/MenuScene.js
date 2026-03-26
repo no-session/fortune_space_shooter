@@ -62,6 +62,9 @@ export default class MenuScene extends Phaser.Scene {
         // Sparkle effects behind title
         this.createTitleSparkles(width, height);
 
+        // Konami Code easter egg listener
+        this.setupKonamiCode();
+
         // Add version text
         this.add.text(width - 10, height - 10, 'v1.0', {
             fontSize: '12px',
@@ -1036,6 +1039,100 @@ export default class MenuScene extends Phaser.Scene {
                 }
             });
         });
+    }
+
+    setupKonamiCode() {
+        const sequence = [
+            Phaser.Input.Keyboard.KeyCodes.UP,
+            Phaser.Input.Keyboard.KeyCodes.UP,
+            Phaser.Input.Keyboard.KeyCodes.DOWN,
+            Phaser.Input.Keyboard.KeyCodes.DOWN,
+            Phaser.Input.Keyboard.KeyCodes.LEFT,
+            Phaser.Input.Keyboard.KeyCodes.RIGHT,
+            Phaser.Input.Keyboard.KeyCodes.LEFT,
+            Phaser.Input.Keyboard.KeyCodes.RIGHT,
+            Phaser.Input.Keyboard.KeyCodes.B,
+            Phaser.Input.Keyboard.KeyCodes.A
+        ];
+        this.konamiIndex = 0;
+
+        this.input.keyboard.on('keydown', (event) => {
+            if (event.keyCode === sequence[this.konamiIndex]) {
+                this.konamiIndex++;
+                if (this.konamiIndex === sequence.length) {
+                    this.konamiIndex = 0;
+                    this.activateKonamiCode();
+                }
+            } else {
+                this.konamiIndex = 0;
+            }
+        });
+    }
+
+    activateKonamiCode() {
+        // Only once per session
+        if (sessionStorage.getItem('fortune-konami-used')) return;
+
+        sessionStorage.setItem('fortune-konami-activated', 'true');
+        sessionStorage.setItem('fortune-konami-used', 'true');
+
+        const width = this.scale.width;
+        const height = this.scale.height;
+
+        // Rainbow flash
+        const rainbowColors = [0xff0000, 0xff8800, 0xffff00, 0x00ff00, 0x0088ff, 0x8800ff, 0xff00ff];
+        let flashIndex = 0;
+        const flashOverlay = this.add.rectangle(width / 2, height / 2, width, height, rainbowColors[0], 0.4);
+        flashOverlay.setDepth(9999);
+
+        const flashTimer = this.time.addEvent({
+            delay: 80,
+            repeat: 13,
+            callback: () => {
+                flashIndex = (flashIndex + 1) % rainbowColors.length;
+                flashOverlay.setFillStyle(rainbowColors[flashIndex], 0.4);
+            }
+        });
+
+        // Cheat activated text
+        const cheatText = this.add.text(width / 2, height / 2, 'CHEAT ACTIVATED!', {
+            fontSize: '48px',
+            fontFamily: 'monospace',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 6,
+            fontStyle: 'bold'
+        });
+        cheatText.setOrigin(0.5);
+        cheatText.setDepth(10000);
+        cheatText.setAlpha(0);
+
+        this.tweens.add({
+            targets: cheatText,
+            alpha: 1,
+            scale: { from: 2, to: 1 },
+            duration: 300,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.time.delayedCall(1500, () => {
+                    this.tweens.add({
+                        targets: [cheatText, flashOverlay],
+                        alpha: 0,
+                        duration: 500,
+                        onComplete: () => {
+                            cheatText.destroy();
+                            flashOverlay.destroy();
+                        }
+                    });
+                });
+            }
+        });
+
+        this.cameras.main.shake(500, 0.015);
+
+        if (this.sounds.click) {
+            try { this.sounds.click.play(); } catch (e) { /* ignore */ }
+        }
     }
 
     showLeaderboard() {
