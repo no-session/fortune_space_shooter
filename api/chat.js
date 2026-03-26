@@ -30,7 +30,7 @@ export default async function handler(req, res) {
       timestamp: Date.now()
     });
     await redis.rpush(CHAT_KEY, chatMessage).catch(() => {});
-    await redis.expire(CHAT_KEY, 86400).catch(() => {}); // 24 hour TTL
+     // 24 hour TTL
 
     // Forward to Telegram
     const text = '💬 Ridhaan: ' + message;
@@ -68,7 +68,7 @@ export default async function handler(req, res) {
     // Update read index
     if (allMessages.length > readIndex) {
       await redis.set(READ_INDEX_KEY, allMessages.length).catch(() => {});
-      await redis.expire(READ_INDEX_KEY, 86400).catch(() => {});
+      
     }
 
     return res.status(200).json({ messages: unread, total: allMessages.length });
@@ -81,7 +81,7 @@ export default async function handler(req, res) {
 
     // Mark all as read
     await redis.set(READ_INDEX_KEY, allMessages.length).catch(() => {});
-    await redis.expire(READ_INDEX_KEY, 86400).catch(() => {});
+    
 
     return res.status(200).json({ messages: allMessages });
   }
