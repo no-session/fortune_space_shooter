@@ -1,9 +1,6 @@
 import { Redis } from '@upstash/redis';
 
-const redis = new Redis({
-  url: process.env.KV_REST_API_URL,
-  token: process.env.KV_REST_API_TOKEN,
-});
+const redis = Redis.fromEnv();
 
 const CHAT_KEY = 'fortune-chat-messages';
 const ALLOWED_CHAT_ID = process.env.NOTIFY_CHAT_ID || '6927192277';
