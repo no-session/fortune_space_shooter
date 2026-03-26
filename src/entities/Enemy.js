@@ -6,7 +6,8 @@ const ENEMY_TEXTURES = {
     [ENEMY_TYPES.SCOUT]: 'enemy_scout',
     [ENEMY_TYPES.FIGHTER]: 'enemy_fighter',
     [ENEMY_TYPES.BOMBER]: 'enemy_bomber',
-    [ENEMY_TYPES.ELITE]: 'enemy_elite'
+    [ENEMY_TYPES.ELITE]: 'enemy_elite',
+    [ENEMY_TYPES.SPLITTER]: 'enemy_fighter'
 };
 
 export default class Enemy extends Phaser.Physics.Arcade.Sprite {
@@ -56,6 +57,12 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.currentFrame = `${texturePrefix}_m`;
         this.lastVelocityX = 0;
         
+        // Splitter gets green tint; isMini flag prevents recursive splitting
+        this.isMini = false;
+        if (this.type === ENEMY_TYPES.SPLITTER) {
+            this.setTint(0x44ff44);
+        }
+
         // Flip the sprite to face downward (enemies face player)
         this.setFlipY(true);
         
@@ -160,6 +167,27 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
 
     die() {
+        // Splitter: spawn 2 mini scouts on death (only if not already a mini)
+        if (this.stats.splits && !this.isMini && this.scene) {
+            for (let i = 0; i < 2; i++) {
+                const offsetX = i === 0 ? -30 : 30;
+                const mini = new Enemy(this.scene, this.x + offsetX, this.y, ENEMY_TYPES.SCOUT);
+                mini.isMini = true;
+                mini.setScale(0.45);
+                // Fly outward at 45-degree angles
+                const angleX = i === 0 ? -80 : 80;
+                mini.setVelocity(angleX, 150);
+                mini.setCollideWorldBounds(false);
+                if (this.scene.enemies) {
+                    this.scene.enemies.add(mini);
+                }
+                // Count minis toward wave enemies
+                if (this.scene.waveManager) {
+                    this.scene.waveManager.enemiesRemaining += 1;
+                }
+            }
+        }
+
         // Create explosion animation with defensive check
         if (this.scene && this.scene.textures && this.scene.textures.exists('explosion1_1')) {
             const explosion = this.scene.add.sprite(this.x, this.y, 'explosion1_1');

@@ -249,6 +249,11 @@ export default class RandomEventManager {
     }
 
     collectMysteryBox(box) {
+        // Achievement tracking
+        if (this.scene.achievementManager) {
+            this.scene.achievementManager.onMysteryBoxCaught();
+        }
+
         // Particle burst
         this.scene.effectManager.createExplosion(box.x, box.y, 'large');
         this.scene.effectManager.screenFlash(0xff00ff, 200);

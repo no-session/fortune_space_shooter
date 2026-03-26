@@ -73,9 +73,17 @@ export default class WaveManager {
     getEnemyTypeForWave() {
         if (this.currentWave >= 12) {
             const rand = Math.random();
-            if (rand < 0.1) return ENEMY_TYPES.ELITE;
-            else if (rand < 0.3) return ENEMY_TYPES.BOMBER;
+            if (rand < 0.08) return ENEMY_TYPES.ELITE;
+            else if (rand < 0.2) return ENEMY_TYPES.SPLITTER;
+            else if (rand < 0.35) return ENEMY_TYPES.BOMBER;
             else if (rand < 0.6) return ENEMY_TYPES.FIGHTER;
+            else return ENEMY_TYPES.SCOUT;
+        }
+        if (this.currentWave >= 10) {
+            const rand = Math.random();
+            if (rand < 0.15) return ENEMY_TYPES.SPLITTER;
+            else if (rand < 0.3) return ENEMY_TYPES.BOMBER;
+            else if (rand < 0.55) return ENEMY_TYPES.FIGHTER;
             else return ENEMY_TYPES.SCOUT;
         }
         if (this.currentWave >= 8) {

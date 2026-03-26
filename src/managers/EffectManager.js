@@ -455,6 +455,45 @@ export default class EffectManager {
         });
     }
 
+    // Confetti effect — colored particles falling with gravity
+    confetti(x, y, count = 30, colors = null) {
+        const defaultColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff, 0xffd700];
+        const palette = colors || defaultColors;
+
+        for (let i = 0; i < count; i++) {
+            const px = x + Phaser.Math.Between(-100, 100);
+            const py = y + Phaser.Math.Between(-20, 20);
+            const color = palette[Math.floor(Math.random() * palette.length)];
+            const size = Phaser.Math.Between(3, 6);
+
+            const particle = this.scene.add.rectangle(px, py, size, size * 1.5, color);
+            particle.setDepth(EFFECT_CONFIG.DEPTH_STREAK_ANNOUNCEMENT);
+            particle.setAngle(Phaser.Math.Between(0, 360));
+
+            this.scene.tweens.add({
+                targets: particle,
+                y: py + Phaser.Math.Between(200, 500),
+                x: px + Phaser.Math.Between(-80, 80),
+                angle: Phaser.Math.Between(-360, 360),
+                alpha: 0,
+                duration: Phaser.Math.Between(1500, 2500),
+                ease: 'Quad.easeIn',
+                onComplete: () => particle.destroy()
+            });
+        }
+    }
+
+    // Slow motion effect
+    slowMotion(scale, duration) {
+        if (!this.scene || !this.scene.time) return;
+        this.scene.time.timeScale = scale;
+        this.scene.time.delayedCall(duration * scale, () => {
+            if (this.scene && this.scene.time) {
+                this.scene.time.timeScale = 1;
+            }
+        });
+    }
+
     // Cleanup
     destroy() {
         this.activeEffects.forEach(effect => {

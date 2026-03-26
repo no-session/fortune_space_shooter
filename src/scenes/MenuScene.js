@@ -303,6 +303,15 @@ export default class MenuScene extends Phaser.Scene {
             () => this.showLeaderboard()
         );
 
+        // Achievements button
+        this.createRetroButton(
+            width / 2,
+            buttonY + 115,
+            'ACHIEVEMENTS',
+            0xffa500,
+            () => this.showAchievements()
+        );
+
         // Blinking "INSERT COIN" text
         const insertCoin = this.add.text(width / 2, buttonY - 30, '[ PRESS START ]', {
             fontSize: '16px',
@@ -995,6 +1004,133 @@ export default class MenuScene extends Phaser.Scene {
         return scores.sort((a, b) => b - a).slice(0, 10);
     }
 
+
+    showAchievements() {
+        const width = this.scale.width;
+        const height = this.scale.height;
+        const elements = [];
+
+        // Load achievements from localStorage
+        const saved = JSON.parse(localStorage.getItem('fortune-achievements') || '{}');
+        const achievements = [
+            { id: 'first_blood', name: 'First Blood', description: 'Kill your first enemy', icon: '🗡️' },
+            { id: 'combo_5', name: 'Combo Starter', description: 'Get a 5x combo', icon: '🔥' },
+            { id: 'combo_20', name: 'Combo King', description: 'Get a 20x combo', icon: '👑' },
+            { id: 'wave_10', name: 'Survivor', description: 'Reach wave 10', icon: '🛡️' },
+            { id: 'wave_25', name: 'Veteran', description: 'Reach wave 25', icon: '⭐' },
+            { id: 'boss_slayer', name: 'Boss Slayer', description: 'Defeat your first boss', icon: '💀' },
+            { id: 'no_hit_wave', name: 'Untouchable', description: 'Complete a wave without damage', icon: '✨' },
+            { id: 'collector', name: 'Coin Collector', description: 'Collect 100 collectibles total', icon: '🪙' },
+            { id: 'nuke_master', name: 'Nuclear Option', description: 'Use 3 screen nukes in one game', icon: '💣' },
+            { id: 'speed_demon', name: 'Speed Demon', description: 'Kill 10 enemies in 5 seconds', icon: '⚡' },
+            { id: 'mystery_lover', name: 'Mystery Lover', description: 'Catch 3 mystery boxes', icon: '🎁' },
+            { id: 'survivor', name: 'Last Stand', description: 'Win a boss fight with <10% health', icon: '💪' }
+        ];
+
+        // Dark overlay
+        const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.85);
+        overlay.setDepth(2000);
+        elements.push(overlay);
+
+        // Panel
+        const panel = this.add.rectangle(width / 2, height / 2, 550, 480, 0x0a0a1a);
+        panel.setDepth(2001);
+        panel.setStrokeStyle(3, 0xffa500);
+        elements.push(panel);
+
+        // Title
+        const title = this.add.text(width / 2, height / 2 - 210, 'ACHIEVEMENTS', {
+            fontSize: '28px',
+            fontFamily: 'monospace',
+            color: '#ffa500',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        title.setOrigin(0.5);
+        title.setDepth(2002);
+        elements.push(title);
+
+        // Count unlocked
+        const unlockedCount = achievements.filter(a => saved[a.id]).length;
+        const countText = this.add.text(width / 2, height / 2 - 185, `${unlockedCount} / ${achievements.length} unlocked`, {
+            fontSize: '14px',
+            fontFamily: 'monospace',
+            color: '#888888'
+        });
+        countText.setOrigin(0.5);
+        countText.setDepth(2002);
+        elements.push(countText);
+
+        // Achievement grid (2 columns)
+        const startX = width / 2 - 240;
+        const startY = height / 2 - 155;
+        const colWidth = 250;
+        const rowHeight = 55;
+
+        achievements.forEach((a, i) => {
+            const col = i % 2;
+            const row = Math.floor(i / 2);
+            const x = startX + col * colWidth;
+            const y = startY + row * rowHeight;
+            const unlocked = saved[a.id] || false;
+
+            // Background card
+            const cardColor = unlocked ? 0x1a2a1a : 0x1a1a2a;
+            const card = this.add.rectangle(x + 115, y + 20, 235, 45, cardColor);
+            card.setStrokeStyle(1, unlocked ? 0x44ff44 : 0x333344);
+            card.setDepth(2002);
+            elements.push(card);
+
+            // Icon
+            const icon = this.add.text(x + 12, y + 10, unlocked ? a.icon : '🔒', {
+                fontSize: '20px'
+            });
+            icon.setDepth(2003);
+            elements.push(icon);
+
+            // Name
+            const nameText = this.add.text(x + 40, y + 7, a.name, {
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                color: unlocked ? '#ffffff' : '#555555',
+                fontStyle: 'bold'
+            });
+            nameText.setDepth(2003);
+            elements.push(nameText);
+
+            // Description
+            const desc = this.add.text(x + 40, y + 24, a.description, {
+                fontSize: '10px',
+                fontFamily: 'monospace',
+                color: unlocked ? '#88ff88' : '#444444'
+            });
+            desc.setDepth(2003);
+            elements.push(desc);
+        });
+
+        // Close button
+        const closeBtn = this.add.rectangle(width / 2, height / 2 + 210, 120, 40, 0x111122);
+        closeBtn.setInteractive({ useHandCursor: true });
+        closeBtn.setDepth(2002);
+        closeBtn.setStrokeStyle(2, 0xffa500);
+        elements.push(closeBtn);
+
+        const closeText = this.add.text(width / 2, height / 2 + 210, 'CLOSE', {
+            fontSize: '16px',
+            fontFamily: 'monospace',
+            color: '#ffa500'
+        });
+        closeText.setOrigin(0.5);
+        closeText.setDepth(2003);
+        elements.push(closeText);
+
+        closeBtn.on('pointerover', () => { closeBtn.setFillStyle(0x223344); this.playHoverSound(); });
+        closeBtn.on('pointerout', () => { closeBtn.setFillStyle(0x111122); });
+        closeBtn.on('pointerdown', () => {
+            this.playClickSound();
+            elements.forEach(el => { if (el && el.destroy) el.destroy(); });
+        });
+    }
 
     showRidhaanPrompt() {
         const width = this.scale.width;

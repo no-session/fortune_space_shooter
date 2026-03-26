@@ -11,8 +11,9 @@ import SoundManager from '../managers/SoundManager.js';
 import StreakManager from '../managers/StreakManager.js';
 import EffectManager from '../managers/EffectManager.js';
 import RandomEventManager from '../managers/RandomEventManager.js';
+import AchievementManager from '../managers/AchievementManager.js';
 import BonusSystem from '../systems/BonusSystem.js';
-import { COLLECTIBLE_TYPES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS } from '../utils/constants.js';
+import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS } from '../utils/constants.js';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -79,6 +80,21 @@ export default class GameScene extends Phaser.Scene {
         // Random event manager
         this.randomEventManager = new RandomEventManager(this);
 
+        // Achievement manager
+        this.achievementManager = new AchievementManager(this);
+
+        // Game session tracking
+        this.gameStartTime = Date.now();
+        this.powerupsCollected = 0;
+        this.waveDamageTaken = false; // track damage per wave for survival bonus
+
+        // Bonus stage state
+        this.bonusStageActive = false;
+        this.bonusStageTimer = 0;
+        this.bonusStageCollected = 0;
+        this.bonusStageTimerText = null;
+        this.bonusStageLabel = null;
+
         // Start first wave with wave name
         this.waveManager.startWave(1);
         this.bonusSystem.startWave(1);
@@ -95,6 +111,15 @@ export default class GameScene extends Phaser.Scene {
         this.gameOver = false;
         this.paused = false;
         this.waveTransitioning = false;
+        this._pendingBonusStage = false;
+
+        // Listen for scene resume (after shop closes) to trigger bonus stage
+        this.events.on('resume', () => {
+            if (this._pendingBonusStage) {
+                this._pendingBonusStage = false;
+                this.startBonusStage();
+            }
+        });
 
         // Unlock skins based on best score
         this.checkSkinUnlocks();
@@ -231,13 +256,14 @@ export default class GameScene extends Phaser.Scene {
                 if (bullet.active && player.active && !this.player.invincible && !this.player.isDying) {
                     bullet.destroy();
                     this.player.takeDamage(10);
+                    this.waveDamageTaken = true;
                     if (!this.player.isAlive()) {
                         this.triggerGameOver();
                     }
                 }
             }
         );
-        
+
         // Enemies vs player
         this.physics.add.overlap(
             this.enemies,
@@ -246,6 +272,7 @@ export default class GameScene extends Phaser.Scene {
                 if (enemy.active && player.active && !this.player.invincible && !this.player.isDying) {
                     enemy.die();
                     this.player.takeDamage(20);
+                    this.waveDamageTaken = true;
                     if (!this.player.isAlive()) {
                         this.triggerGameOver();
                     }
@@ -291,6 +318,8 @@ export default class GameScene extends Phaser.Scene {
                 const value = collectible.value || 10;
                 const type = collectible.type || 'coin';
                 this.scoreManager.addCollectible(value, this.game.getTime(), type);
+                if (this.achievementManager) this.achievementManager.onCollectibleCollected();
+                if (this.bonusStageActive) this.bonusStageCollected++;
                 this.updateUI();
 
                 // Collect the item (handles effects and destruction)
@@ -520,7 +549,12 @@ export default class GameScene extends Phaser.Scene {
 
     update(time) {
         if (this.gameOver || this.paused) return;
-        
+
+        // Update bonus stage if active
+        if (this.bonusStageActive) {
+            this.updateBonusStage(this.game.loop.delta);
+        }
+
         // Update starfield
         this.updateStarfield();
         
@@ -532,9 +566,13 @@ export default class GameScene extends Phaser.Scene {
         this.scoreManager.updateCombo();
         this.streakManager.update(this.game.loop.delta);
 
-        // Combo announcements
+        // Combo announcements + achievement tracking
         const currentCombo = this.scoreManager.getCombo();
         if (currentCombo > 0 && currentCombo !== this.lastComboAnnouncement) {
+            // Achievement check for combo
+            if (this.achievementManager) {
+                this.achievementManager.onComboChanged(currentCombo);
+            }
             for (let i = COMBO_ANNOUNCEMENTS.length - 1; i >= 0; i--) {
                 if (currentCombo === COMBO_ANNOUNCEMENTS[i].combo) {
                     this.effectManager.showComboAnnouncement(currentCombo);
@@ -595,6 +633,7 @@ export default class GameScene extends Phaser.Scene {
                             if (bullet.active && player.active && !this.player.invincible && !this.player.isDying) {
                                 bullet.destroy();
                                 this.player.takeDamage(15);
+                                this.waveDamageTaken = true;
                                 if (!this.player.isAlive()) {
                                     this.triggerGameOver();
                                 }
@@ -630,6 +669,8 @@ export default class GameScene extends Phaser.Scene {
                         const value = collectible.value || 10;
                         const type = collectible.type || 'coin';
                         this.scoreManager.addCollectible(value, this.game.getTime(), type);
+                        if (this.achievementManager) this.achievementManager.onCollectibleCollected();
+                        if (this.bonusStageActive) this.bonusStageCollected++;
                         this.updateUI();
                         if (typeof collectible.collect === 'function') {
                             collectible.collect();
@@ -755,6 +796,11 @@ export default class GameScene extends Phaser.Scene {
         this.totalKills++;
         this.checkKillMilestone();
 
+        // Achievement tracking
+        if (this.achievementManager) {
+            this.achievementManager.onEnemyKilled();
+        }
+
         // Update wave manager and UI
         this.waveManager.onEnemyKilled();
         this.updateUI();
@@ -818,6 +864,13 @@ export default class GameScene extends Phaser.Scene {
 
         const bonusData = this.bonusSystem.calculateWaveBonuses(enemiesKilled, totalEnemies);
 
+        // Wave survival bonus: no damage taken this wave
+        if (!this.waveDamageTaken) {
+            this.scoreManager.addBonusScore(1000, 'waveClear');
+            this.showWaveSurvivalBonus();
+            if (this.achievementManager) this.achievementManager.onWaveCompletedNoDamage();
+        }
+
         // Award bonuses to score
         if (bonusData.waveClearPoints > 0) {
             this.scoreManager.addBonusScore(bonusData.waveClearPoints, 'waveClear');
@@ -861,13 +914,21 @@ export default class GameScene extends Phaser.Scene {
 
                 // Reset wave-specific bonus tracking
                 this.bonusSystem.resetWaveStats();
+                this.waveDamageTaken = false;
 
-                // If boss wave, go to shop
+                const nextWaveNum = currentWave + 1;
+
+                // Achievement: wave start check
+                if (this.achievementManager) {
+                    this.achievementManager.onWaveStart(nextWaveNum);
+                }
+
+                // If boss wave, go to shop, then possibly bonus stage
                 if (this.waveManager.isBossWave()) {
                     // Start the next wave first to prevent re-triggering
-                    this.waveManager.startWave(currentWave + 1);
-                    this.bonusSystem.startWave(currentWave + 1);
-                    this.showWaveNameDisplay(currentWave + 1);
+                    this.waveManager.startWave(nextWaveNum);
+                    this.bonusSystem.startWave(nextWaveNum);
+                    this.showWaveNameDisplay(nextWaveNum);
                     this.waveTransitioning = false;
 
                     // Then launch shop
@@ -876,11 +937,16 @@ export default class GameScene extends Phaser.Scene {
                         score: this.scoreManager.getScore(),
                         wave: currentWave
                     });
+
+                    // Bonus stage every 10 waves (after boss + shop)
+                    if (currentWave % 10 === 0) {
+                        this._pendingBonusStage = true;
+                    }
                 } else {
                     // Start next wave
-                    this.waveManager.startWave(currentWave + 1);
-                    this.bonusSystem.startWave(currentWave + 1);
-                    this.showWaveNameDisplay(currentWave + 1);
+                    this.waveManager.startWave(nextWaveNum);
+                    this.bonusSystem.startWave(nextWaveNum);
+                    this.showWaveNameDisplay(nextWaveNum);
                     this.waveTransitioning = false;
                 }
             }
@@ -890,6 +956,12 @@ export default class GameScene extends Phaser.Scene {
     onBossDefeated(scoreValue = 5000) {
         this.waveManager.onBossKilled();
         this.scoreManager.addScore(scoreValue);
+
+        // Achievement: boss slayer + last stand
+        if (this.achievementManager && this.player) {
+            const healthPct = this.player.health / this.player.maxHealth;
+            this.achievementManager.onBossDefeated(healthPct);
+        }
 
         // EPIC boss death: slow motion
         this.time.timeScale = 0.5;
@@ -959,6 +1031,7 @@ export default class GameScene extends Phaser.Scene {
 
     applyPowerUp(type) {
         const config = POWERUP_CONFIG[type];
+        this.powerupsCollected++;
 
         // Show announcement
         this.effectManager.showScorePopup(
@@ -998,6 +1071,8 @@ export default class GameScene extends Phaser.Scene {
     }
 
     executeScreenNuke() {
+        if (this.achievementManager) this.achievementManager.onNukeUsed();
+
         // EPIC slow motion nuke
         this.effectManager.screenFlash(0xffffff, 400);
         this.effectManager.screenShake({ duration: 800, intensity: 0.025 });
@@ -1189,20 +1264,280 @@ export default class GameScene extends Phaser.Scene {
         }
     }
 
+    // --- WAVE SURVIVAL BONUS ---
+    showWaveSurvivalBonus() {
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2 + 30;
+
+        const text = this.add.text(centerX, centerY, '✨ PERFECT WAVE! +1000 BONUS', {
+            fontSize: '28px',
+            fontFamily: 'monospace',
+            color: '#00ff00',
+            stroke: '#000000',
+            strokeThickness: 4,
+            fontStyle: 'bold'
+        });
+        text.setOrigin(0.5);
+        text.setDepth(EFFECT_CONFIG.DEPTH_STREAK_ANNOUNCEMENT + 20);
+        text.setAlpha(0);
+
+        this.tweens.add({
+            targets: text,
+            alpha: 1,
+            scale: { from: 1.5, to: 1 },
+            duration: 300,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.time.delayedCall(1500, () => {
+                    this.tweens.add({
+                        targets: text,
+                        alpha: 0,
+                        y: centerY - 40,
+                        duration: 500,
+                        onComplete: () => text.destroy()
+                    });
+                });
+            }
+        });
+
+        // Confetti celebration
+        this.effectManager.confetti(centerX, centerY - 50, 40);
+    }
+
+    // --- BONUS STAGE ---
+    startBonusStage() {
+        this.bonusStageActive = true;
+        this.bonusStageCollected = 0;
+        this.bonusStageTimer = 15000; // 15 seconds
+        this.waveTransitioning = true; // prevent normal wave progression
+
+        // Clear any remaining enemies and bullets
+        this.enemies.clear(true, true);
+        this.enemyBullets.clear(true, true);
+
+        // Show BONUS STAGE announcement
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2;
+
+        const label = this.add.text(centerX, centerY, 'BONUS STAGE!', {
+            fontSize: '48px',
+            fontFamily: 'monospace',
+            color: '#ffd700',
+            stroke: '#000000',
+            strokeThickness: 6,
+            fontStyle: 'bold'
+        });
+        label.setOrigin(0.5);
+        label.setDepth(EFFECT_CONFIG.DEPTH_STREAK_ANNOUNCEMENT + 30);
+        label.setAlpha(0);
+
+        // Sparkle confetti around the text
+        this.effectManager.confetti(centerX, centerY, 50, [0xffd700, 0xffaa00, 0xffff00, 0xffffff]);
+        this.effectManager.screenShake(EFFECT_CONFIG.SHAKE_MEDIUM);
+
+        this.tweens.add({
+            targets: label,
+            alpha: 1,
+            scale: { from: 2.5, to: 1 },
+            duration: 500,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.time.delayedCall(1500, () => {
+                    this.tweens.add({
+                        targets: label,
+                        alpha: 0,
+                        duration: 400,
+                        onComplete: () => label.destroy()
+                    });
+                });
+            }
+        });
+
+        // Timer display at top
+        this.bonusStageTimerText = this.add.text(centerX, 20, '15', {
+            fontSize: '32px',
+            fontFamily: 'monospace',
+            color: '#ffd700',
+            stroke: '#000000',
+            strokeThickness: 3
+        });
+        this.bonusStageTimerText.setOrigin(0.5, 0);
+        this.bonusStageTimerText.setDepth(1002);
+
+        // Collected counter
+        this.bonusStageLabel = this.add.text(centerX, 55, 'Collected: 0', {
+            fontSize: '18px',
+            fontFamily: 'monospace',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        this.bonusStageLabel.setOrigin(0.5, 0);
+        this.bonusStageLabel.setDepth(1002);
+
+        // Start spawning collectibles in patterns
+        this.bonusStageSpawnTimer = this.time.addEvent({
+            delay: 300,
+            callback: () => this.spawnBonusCollectible(),
+            loop: true
+        });
+
+        this.bonusStagePatternIndex = 0;
+    }
+
+    spawnBonusCollectible() {
+        if (!this.bonusStageActive) return;
+
+        const width = this.scale.width;
+        const pattern = this.bonusStagePatternIndex % 4;
+        this.bonusStagePatternIndex++;
+
+        const types = [COLLECTIBLE_TYPES.COIN, COLLECTIBLE_TYPES.COIN, COLLECTIBLE_TYPES.COIN,
+                       COLLECTIBLE_TYPES.CRYSTAL, COLLECTIBLE_TYPES.STAR];
+
+        switch (pattern) {
+            case 0: {
+                // Wave pattern: 5 coins in a sine wave
+                for (let i = 0; i < 5; i++) {
+                    const x = 100 + i * ((width - 200) / 4);
+                    const type = types[Math.floor(Math.random() * types.length)];
+                    const c = new Collectible(this, x, -20 - i * 15, type);
+                    this.collectibles.add(c);
+                }
+                break;
+            }
+            case 1: {
+                // V-shape
+                for (let i = 0; i < 5; i++) {
+                    const x = width / 2 + (i - 2) * 60;
+                    const yOff = Math.abs(i - 2) * 25;
+                    const type = i === 2 ? COLLECTIBLE_TYPES.STAR : COLLECTIBLE_TYPES.COIN;
+                    const c = new Collectible(this, x, -20 - yOff, type);
+                    this.collectibles.add(c);
+                }
+                break;
+            }
+            case 2: {
+                // Circle arc
+                for (let i = 0; i < 6; i++) {
+                    const angle = (Math.PI * i) / 5;
+                    const x = width / 2 + Math.cos(angle) * 150;
+                    const type = i % 3 === 0 ? COLLECTIBLE_TYPES.CRYSTAL : COLLECTIBLE_TYPES.COIN;
+                    const c = new Collectible(this, x, -20, type);
+                    this.collectibles.add(c);
+                }
+                break;
+            }
+            case 3: {
+                // Random cluster with a star in the middle
+                const cx = Phaser.Math.Between(100, width - 100);
+                for (let i = 0; i < 4; i++) {
+                    const ox = Phaser.Math.Between(-50, 50);
+                    const c = new Collectible(this, cx + ox, -20 - i * 10, COLLECTIBLE_TYPES.COIN);
+                    this.collectibles.add(c);
+                }
+                const star = new Collectible(this, cx, -30, COLLECTIBLE_TYPES.STAR);
+                this.collectibles.add(star);
+                break;
+            }
+        }
+    }
+
+    updateBonusStage(delta) {
+        if (!this.bonusStageActive) return;
+
+        this.bonusStageTimer -= delta;
+        const seconds = Math.max(0, Math.ceil(this.bonusStageTimer / 1000));
+
+        if (this.bonusStageTimerText) {
+            this.bonusStageTimerText.setText(seconds.toString());
+            if (seconds <= 5) this.bonusStageTimerText.setColor('#ff4444');
+        }
+        if (this.bonusStageLabel) {
+            this.bonusStageLabel.setText(`Collected: ${this.bonusStageCollected}`);
+        }
+
+        if (this.bonusStageTimer <= 0) {
+            this.endBonusStage();
+        }
+    }
+
+    endBonusStage() {
+        this.bonusStageActive = false;
+
+        // Stop spawning
+        if (this.bonusStageSpawnTimer) {
+            this.bonusStageSpawnTimer.destroy();
+            this.bonusStageSpawnTimer = null;
+        }
+
+        // Clean up timer UI
+        if (this.bonusStageTimerText) { this.bonusStageTimerText.destroy(); this.bonusStageTimerText = null; }
+        if (this.bonusStageLabel) { this.bonusStageLabel.destroy(); this.bonusStageLabel = null; }
+
+        // Show results
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2;
+
+        const resultText = this.add.text(centerX, centerY - 20, `BONUS COMPLETE!`, {
+            fontSize: '32px',
+            fontFamily: 'monospace',
+            color: '#ffd700',
+            stroke: '#000000',
+            strokeThickness: 4,
+            fontStyle: 'bold'
+        });
+        resultText.setOrigin(0.5);
+        resultText.setDepth(EFFECT_CONFIG.DEPTH_STREAK_ANNOUNCEMENT + 30);
+
+        const countText = this.add.text(centerX, centerY + 25, `${this.bonusStageCollected} items collected!`, {
+            fontSize: '22px',
+            fontFamily: 'monospace',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 3
+        });
+        countText.setOrigin(0.5);
+        countText.setDepth(EFFECT_CONFIG.DEPTH_STREAK_ANNOUNCEMENT + 30);
+
+        this.effectManager.confetti(centerX, centerY - 60, 50);
+
+        // Fade out and resume normal gameplay
+        this.time.delayedCall(2500, () => {
+            this.tweens.add({
+                targets: [resultText, countText],
+                alpha: 0,
+                duration: 500,
+                onComplete: () => {
+                    resultText.destroy();
+                    countText.destroy();
+                    this.waveTransitioning = false;
+                }
+            });
+        });
+    }
+
     triggerGameOver() {
         if (this.gameOver) return;
-        
+
         this.gameOver = true;
         this.scene.pause();
-        
-        // Save score
+
+        // Gather all stats
         const finalScore = this.scoreManager.getScore();
         const maxCombo = this.scoreManager.getMaxCombo();
-        
+        const timePlayed = Date.now() - this.gameStartTime;
+        const achievementsUnlocked = this.achievementManager ? this.achievementManager.getSessionUnlocked() : [];
+
         this.scene.launch('GameOverScene', {
             score: finalScore,
             wave: this.waveManager.getCurrentWave(),
-            maxCombo: maxCombo
+            maxCombo: maxCombo,
+            enemiesKilled: this.totalKills,
+            accuracy: this.bonusSystem.getAccuracyPercent(),
+            powerupsCollected: this.powerupsCollected,
+            timePlayed: timePlayed,
+            achievementsUnlocked: achievementsUnlocked
         });
     }
 }

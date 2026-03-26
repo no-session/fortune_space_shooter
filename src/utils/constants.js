@@ -15,7 +15,8 @@ export const ENEMY_TYPES = {
     SCOUT: 'scout',
     FIGHTER: 'fighter',
     BOMBER: 'bomber',
-    ELITE: 'elite'
+    ELITE: 'elite',
+    SPLITTER: 'splitter'
 };
 
 // Enemy Stats
@@ -46,6 +47,13 @@ export const ENEMY_STATS = {
         speed: 120,
         points: 250,
         dropChance: 0.8
+    },
+    [ENEMY_TYPES.SPLITTER]: {
+        health: 30,
+        speed: 90,
+        points: 200,
+        dropChance: 0.4,
+        splits: true
     }
 };
 
