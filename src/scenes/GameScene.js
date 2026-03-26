@@ -3,6 +3,7 @@ import Player from '../entities/Player.js';
 import Enemy from '../entities/Enemy.js';
 import Boss from '../entities/Boss.js';
 import Collectible from '../entities/Collectible.js';
+import PowerUp from '../entities/PowerUp.js';
 import FormationManager from '../managers/FormationManager.js';
 import WaveManager from '../managers/WaveManager.js';
 import ScoreManager from '../managers/ScoreManager.js';
@@ -10,7 +11,7 @@ import SoundManager from '../managers/SoundManager.js';
 import StreakManager from '../managers/StreakManager.js';
 import EffectManager from '../managers/EffectManager.js';
 import BonusSystem from '../systems/BonusSystem.js';
-import { COLLECTIBLE_TYPES, GAME_CONFIG, EFFECT_CONFIG } from '../utils/constants.js';
+import { COLLECTIBLE_TYPES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES } from '../utils/constants.js';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -37,7 +38,15 @@ export default class GameScene extends Phaser.Scene {
         this.enemies = this.physics.add.group();
         this.enemyBullets = this.physics.add.group();
         this.collectibles = this.physics.add.group();
+        this.powerups = this.physics.add.group();
         this.bosses = this.physics.add.group();
+
+        // Kill milestone tracking
+        this.totalKills = 0;
+        this.reachedMilestones = new Set();
+
+        // Active power-up timers for UI
+        this.activePowerUpTimers = [];
         
         // Collision detection
         this.setupCollisions();
@@ -238,6 +247,37 @@ export default class GameScene extends Phaser.Scene {
             }
         );
         
+        // Power-ups vs player
+        this.physics.add.overlap(
+            this.powerups,
+            this.player,
+            (obj1, obj2) => {
+                let powerup, player;
+                if (obj1 === this.player || obj1?.constructor?.name === 'Player') {
+                    player = obj1;
+                    powerup = obj2;
+                } else {
+                    powerup = obj1;
+                    player = obj2;
+                }
+
+                if (!powerup || !player || powerup.collected || !powerup.active || !player.active) return;
+
+                powerup.collected = true;
+                this.applyPowerUp(powerup.type);
+
+                if (this.soundManager) {
+                    this.soundManager.playCollect();
+                }
+
+                if (typeof powerup.collect === 'function') {
+                    powerup.collect();
+                } else {
+                    powerup.destroy();
+                }
+            }
+        );
+
         // Boss bullets vs player (set up in update loop for dynamic tracking)
     }
 
@@ -301,6 +341,25 @@ export default class GameScene extends Phaser.Scene {
         });
         this.accuracyText.setDepth(1000);
         this.accuracyText.setOrigin(0, 0);
+
+        // --- Health Bar ---
+        this.healthBarBg = this.add.rectangle(10, 88, 150, 14, 0x333333);
+        this.healthBarBg.setOrigin(0, 0);
+        this.healthBarBg.setDepth(1000);
+
+        this.healthBarFill = this.add.rectangle(11, 89, 148, 12, 0x00ff00);
+        this.healthBarFill.setOrigin(0, 0);
+        this.healthBarFill.setDepth(1001);
+
+        this.healthText = this.add.text(165, 87, `HP: ${this.player.health}/${this.player.maxHealth}`, {
+            fontSize: '14px',
+            fontFamily: 'monospace',
+            color: '#ffffff'
+        });
+        this.healthText.setDepth(1000);
+
+        // --- Power-up indicators container ---
+        this.powerUpIndicators = [];
     }
 
     updateUI() {
@@ -339,6 +398,69 @@ export default class GameScene extends Phaser.Scene {
         if (this.bonusSystem.shotsFired > 0) {
             this.accuracyText.setText(`Accuracy: ${accuracy}%`);
         }
+
+        // Update health bar
+        if (this.healthBarFill && this.player) {
+            const healthPct = this.player.health / this.player.maxHealth;
+            const targetWidth = Math.max(0, 148 * healthPct);
+
+            // Smooth tween
+            this.tweens.add({
+                targets: this.healthBarFill,
+                displayWidth: targetWidth,
+                duration: 200,
+                ease: 'Power1'
+            });
+
+            // Color based on health %
+            let barColor = 0x00ff00;
+            if (healthPct <= 0.25) barColor = 0xff0000;
+            else if (healthPct <= 0.5) barColor = 0xffff00;
+            this.healthBarFill.setFillStyle(barColor);
+
+            this.healthText.setText(`HP: ${this.player.health}/${this.player.maxHealth}`);
+        }
+
+        // Update power-up indicators
+        this.updatePowerUpIndicators();
+    }
+
+    updatePowerUpIndicators() {
+        // Clear old indicators
+        this.powerUpIndicators.forEach(indicator => {
+            if (indicator.bg) indicator.bg.destroy();
+            if (indicator.text) indicator.text.destroy();
+        });
+        this.powerUpIndicators = [];
+
+        const startX = 10;
+        const startY = 108;
+
+        this.activePowerUpTimers.forEach((timer, index) => {
+            const x = startX + index * 60;
+
+            let label = timer.label;
+            if (!timer.permanent) {
+                const elapsed = this.time.now - timer.startTime;
+                const remaining = Math.max(0, Math.ceil((timer.duration - elapsed) / 1000));
+                label = `${timer.label} ${remaining}s`;
+            } else if (timer.label === 'SHIELD') {
+                label = `S:${this.player.shieldHits}`;
+            }
+
+            const bg = this.add.rectangle(x, startY, 55, 16, timer.color, 0.3);
+            bg.setOrigin(0, 0);
+            bg.setDepth(1000);
+
+            const text = this.add.text(x + 3, startY + 1, label, {
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                color: '#ffffff'
+            });
+            text.setDepth(1001);
+
+            this.powerUpIndicators.push({ bg, text });
+        });
     }
 
     update(time) {
@@ -455,6 +577,25 @@ export default class GameScene extends Phaser.Scene {
             }
         }
         
+        // Update power-ups
+        const powerupsList = this.powerups.children.entries.slice();
+        for (let i = powerupsList.length - 1; i >= 0; i--) {
+            const powerup = powerupsList[i];
+            if (powerup && powerup.active && !powerup.collected) {
+                if (powerup.update) {
+                    powerup.update(this.player);
+                }
+                if (powerup.y > this.scale.height + 50) {
+                    powerup.destroy();
+                }
+            }
+        }
+
+        // Update shield timer display (remove if shield depleted)
+        if (this.player.shieldHits <= 0) {
+            this.removePowerUpTimer('SHIELD');
+        }
+
         // Check for wave completion (only if not already transitioning)
         if (this.waveManager.isWaveComplete() && !this.waveTransitioning) {
             this.nextWave();
@@ -532,6 +673,15 @@ export default class GameScene extends Phaser.Scene {
         if (Math.random() < enemy.dropChance) {
             this.dropCollectible(enemy.x, enemy.y);
         }
+
+        // Drop power-up (~10% chance, separate from collectibles)
+        if (Math.random() < POWERUP_DROP_CHANCE) {
+            this.dropPowerUp(enemy.x, enemy.y);
+        }
+
+        // Track kills for milestones
+        this.totalKills++;
+        this.checkKillMilestone();
 
         // Update wave manager and UI
         this.waveManager.onEnemyKilled();
@@ -697,6 +847,245 @@ export default class GameScene extends Phaser.Scene {
                         explosion.destroy();
                     }
                 });
+            });
+        }
+    }
+
+    // --- POWER-UP SYSTEM ---
+
+    dropPowerUp(x, y) {
+        // Weighted random selection based on drop chances
+        const rand = Math.random();
+        let cumulative = 0;
+        let selectedType = POWERUP_TYPES.SHIELD;
+
+        const types = Object.values(POWERUP_TYPES);
+        const totalChance = types.reduce((sum, t) => sum + POWERUP_CONFIG[t].dropChance, 0);
+
+        for (const type of types) {
+            cumulative += POWERUP_CONFIG[type].dropChance / totalChance;
+            if (rand < cumulative) {
+                selectedType = type;
+                break;
+            }
+        }
+
+        const powerup = new PowerUp(this, x, y, selectedType);
+        this.powerups.add(powerup);
+    }
+
+    applyPowerUp(type) {
+        const config = POWERUP_CONFIG[type];
+
+        // Show announcement
+        this.effectManager.showScorePopup(
+            this.player.x, this.player.y,
+            type.toUpperCase().replace('_', ' '),
+            { color: '#ffffff', size: EFFECT_CONFIG.POPUP_LARGE, prefix: '' }
+        );
+
+        switch (type) {
+            case POWERUP_TYPES.SHIELD:
+                this.player.activateShield(config.hitsAbsorbed);
+                this.addPowerUpTimer('SHIELD', 0, 0x0088ff);
+                break;
+
+            case POWERUP_TYPES.RAPID_FIRE:
+                this.player.activateRapidFire(config.duration);
+                this.addPowerUpTimer('RAPID', config.duration, 0xff3333);
+                this.time.delayedCall(config.duration, () => {
+                    this.player.deactivateRapidFire();
+                    this.removePowerUpTimer('RAPID');
+                });
+                break;
+
+            case POWERUP_TYPES.SCREEN_NUKE:
+                this.executeScreenNuke();
+                break;
+
+            case POWERUP_TYPES.MAGNET:
+                this.player.activateMagnet(config.magnetRange);
+                this.addPowerUpTimer('MAGNET', config.duration, 0xffdd00);
+                this.time.delayedCall(config.duration, () => {
+                    this.player.deactivateMagnet();
+                    this.removePowerUpTimer('MAGNET');
+                });
+                break;
+        }
+    }
+
+    executeScreenNuke() {
+        // White flash
+        this.effectManager.screenFlash(0xffffff, 300);
+        this.effectManager.screenShake(EFFECT_CONFIG.SHAKE_LARGE);
+
+        // Kill all enemies on screen
+        const enemiesToKill = this.enemies.children.entries.slice();
+        for (let i = enemiesToKill.length - 1; i >= 0; i--) {
+            const enemy = enemiesToKill[i];
+            if (enemy && enemy.active) {
+                enemy.die();
+            }
+        }
+    }
+
+    addPowerUpTimer(label, duration, color) {
+        // Remove existing timer with same label
+        this.removePowerUpTimer(label);
+
+        const timer = {
+            label,
+            color,
+            startTime: this.time.now,
+            duration,
+            permanent: duration === 0
+        };
+        this.activePowerUpTimers.push(timer);
+    }
+
+    removePowerUpTimer(label) {
+        this.activePowerUpTimers = this.activePowerUpTimers.filter(t => t.label !== label);
+    }
+
+    // --- BOSS WARNING SYSTEM ---
+
+    showBossWarning(callback) {
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2;
+
+        // Red tint overlay
+        const overlay = this.add.rectangle(centerX, centerY, this.scale.width, this.scale.height, 0xff0000, 0.1);
+        overlay.setDepth(900);
+
+        // Warning text
+        const warningText = this.add.text(centerX, centerY, 'WARNING', {
+            fontSize: '48px',
+            fontFamily: 'monospace',
+            color: '#ff0000',
+            stroke: '#000000',
+            strokeThickness: 6,
+            fontStyle: 'bold'
+        });
+        warningText.setOrigin(0.5);
+        warningText.setDepth(1000);
+        warningText.setAlpha(0);
+
+        // Flash 3 times
+        let flashCount = 0;
+        const flashWarning = () => {
+            if (flashCount >= 3) {
+                warningText.destroy();
+                overlay.destroy();
+                if (callback) callback();
+                return;
+            }
+
+            this.tweens.add({
+                targets: warningText,
+                alpha: { from: 0, to: 1 },
+                scale: { from: 1.5, to: 1 },
+                duration: 300,
+                yoyo: true,
+                hold: 200,
+                onComplete: () => {
+                    flashCount++;
+                    flashWarning();
+                }
+            });
+
+            // Camera shake each flash
+            this.cameras.main.shake(200, 0.008);
+        };
+
+        // Pulse the overlay
+        this.tweens.add({
+            targets: overlay,
+            alpha: { from: 0.05, to: 0.15 },
+            duration: 400,
+            yoyo: true,
+            repeat: 2,
+            onComplete: () => {
+                overlay.destroy();
+            }
+        });
+
+        flashWarning();
+    }
+
+    // --- KILL MILESTONE CELEBRATIONS ---
+
+    checkKillMilestone() {
+        for (const milestone of KILL_MILESTONES) {
+            if (this.totalKills >= milestone.kills && !this.reachedMilestones.has(milestone.kills)) {
+                this.reachedMilestones.add(milestone.kills);
+                this.showKillMilestone(milestone);
+            }
+        }
+    }
+
+    showKillMilestone(milestone) {
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2 - 80;
+
+        const text = this.add.text(centerX, centerY, milestone.text, {
+            fontSize: '36px',
+            fontFamily: 'monospace',
+            color: milestone.color,
+            stroke: '#000000',
+            strokeThickness: 5,
+            fontStyle: 'bold'
+        });
+        text.setOrigin(0.5);
+        text.setDepth(EFFECT_CONFIG.DEPTH_STREAK_ANNOUNCEMENT);
+        text.setAlpha(0);
+
+        this.tweens.add({
+            targets: text,
+            alpha: 1,
+            scale: { from: 2, to: 1 },
+            duration: 300,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.time.delayedCall(1500, () => {
+                    this.tweens.add({
+                        targets: text,
+                        alpha: 0,
+                        y: centerY - 40,
+                        duration: 500,
+                        onComplete: () => text.destroy()
+                    });
+                });
+            }
+        });
+
+        this.effectManager.screenShake(EFFECT_CONFIG.SHAKE_MEDIUM);
+
+        // Confetti effect for special milestones
+        if (milestone.confetti) {
+            this.spawnConfetti();
+        }
+    }
+
+    spawnConfetti() {
+        const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff, 0xffd700];
+
+        for (let i = 0; i < 30; i++) {
+            const x = Phaser.Math.Between(50, this.scale.width - 50);
+            const y = Phaser.Math.Between(-20, 50);
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const size = Phaser.Math.Between(3, 6);
+
+            const particle = this.add.circle(x, y, size, color);
+            particle.setDepth(EFFECT_CONFIG.DEPTH_STREAK_ANNOUNCEMENT);
+
+            this.tweens.add({
+                targets: particle,
+                y: y + Phaser.Math.Between(200, 500),
+                x: x + Phaser.Math.Between(-80, 80),
+                alpha: 0,
+                duration: Phaser.Math.Between(1500, 2500),
+                ease: 'Quad.easeIn',
+                onComplete: () => particle.destroy()
             });
         }
     }

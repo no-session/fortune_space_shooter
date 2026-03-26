@@ -5,6 +5,7 @@ import VFormation from '../formations/VFormation.js';
 import GridFormation from '../formations/GridFormation.js';
 import CircleFormation from '../formations/CircleFormation.js';
 import WaveFormation from '../formations/WaveFormation.js';
+import SpiralFormation from '../formations/SpiralFormation.js';
 
 export default class FormationManager {
     constructor(scene) {
@@ -28,6 +29,9 @@ export default class FormationManager {
                 break;
             case FORMATION_TYPES.WAVE:
                 formation = new WaveFormation(this.scene, enemyType, count, startX, startY);
+                break;
+            case FORMATION_TYPES.SPIRAL:
+                formation = new SpiralFormation(this.scene, enemyType, count, startX, startY);
                 break;
             default:
                 formation = new VFormation(this.scene, enemyType, count, startX, startY);

@@ -43,6 +43,11 @@ export default class WaveManager {
             FORMATION_TYPES.WAVE
         ];
 
+        // Add spiral formation from wave 6+
+        if (this.currentWave >= 6) {
+            formationTypes.push(FORMATION_TYPES.SPIRAL);
+        }
+
         // Longer delays between formations (2 seconds instead of 1)
         const spawnDelay = 2000;
 
@@ -96,11 +101,22 @@ export default class WaveManager {
         const bossIndex = Math.floor((this.currentWave / 5) - 1) % BOSS_WAVE_SEQUENCE.length;
         const bossType = BOSS_WAVE_SEQUENCE[bossIndex];
 
-        this.scene.time.delayedCall(500, () => {
-            if (this.scene.spawnBoss) {
-                this.scene.spawnBoss(bossType, bossX, bossY);
-            }
-        });
+        // Show boss warning first, then spawn after 3-second warning
+        if (this.scene.showBossWarning) {
+            this.scene.showBossWarning(() => {
+                this.scene.time.delayedCall(500, () => {
+                    if (this.scene.spawnBoss) {
+                        this.scene.spawnBoss(bossType, bossX, bossY);
+                    }
+                });
+            });
+        } else {
+            this.scene.time.delayedCall(500, () => {
+                if (this.scene.spawnBoss) {
+                    this.scene.spawnBoss(bossType, bossX, bossY);
+                }
+            });
+        }
     }
 
     onEnemyKilled() {

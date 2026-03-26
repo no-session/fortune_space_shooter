@@ -47,6 +47,14 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         // Invincibility and dying state
         this.invincible = false;
         this.isDying = false;
+
+        // Power-up states
+        this.shieldHits = 0;
+        this.shieldGraphic = null;
+        this.rapidFire = false;
+        this.baseFireRate = this.fireRate;
+        this.magnetActive = false;
+        this.baseMagnetRange = 80;
         
         // Set up input
         this.setupInput();
@@ -164,6 +172,11 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         if (this.exhaust) {
             this.exhaust.setPosition(this.x, this.y + 35);
         }
+
+        // Update shield graphic position
+        if (this.shieldGraphic) {
+            this.shieldGraphic.setPosition(this.x, this.y);
+        }
         
         // Shooting
         if (this.autoFire || this.isFiring) {
@@ -242,6 +255,16 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         if (this.invincible || this.isDying) return;
         if (!this.scene || !this.scene.time) return; // Safety check
         if (!this.active || !this.visible) return; // Don't take damage if not visible
+
+        // Shield absorbs hit
+        if (this.shieldHits > 0) {
+            this.absorbShieldHit();
+            // Play hit sound but no damage
+            if (this.scene.soundManager) {
+                this.scene.soundManager.playHit();
+            }
+            return;
+        }
 
         this.health -= amount;
 
@@ -435,11 +458,71 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         this.speed += 50;
     }
 
+    // Power-up: Shield
+    activateShield(hits) {
+        this.shieldHits = hits;
+        if (this.shieldGraphic) {
+            this.shieldGraphic.destroy();
+        }
+        this.shieldGraphic = this.scene.add.circle(this.x, this.y, 30, 0x0088ff, 0.25);
+        this.shieldGraphic.setStrokeStyle(2, 0x00aaff, 0.8);
+        this.shieldGraphic.setDepth(101);
+    }
+
+    absorbShieldHit() {
+        if (this.shieldHits <= 0) return false;
+        this.shieldHits--;
+
+        // Flash shield
+        if (this.shieldGraphic) {
+            this.shieldGraphic.setFillStyle(0x00aaff, 0.6);
+            this.scene.time.delayedCall(100, () => {
+                if (this.shieldGraphic) {
+                    if (this.shieldHits > 0) {
+                        this.shieldGraphic.setFillStyle(0x0088ff, 0.25);
+                    } else {
+                        this.shieldGraphic.destroy();
+                        this.shieldGraphic = null;
+                    }
+                }
+            });
+        }
+        return true;
+    }
+
+    // Power-up: Rapid Fire
+    activateRapidFire(duration) {
+        this.rapidFire = true;
+        this.fireRate = Math.floor(this.baseFireRate / 2);
+    }
+
+    deactivateRapidFire() {
+        this.rapidFire = false;
+        this.fireRate = this.baseFireRate;
+    }
+
+    // Power-up: Magnet
+    activateMagnet(magnetRange) {
+        this.magnetActive = true;
+    }
+
+    deactivateMagnet() {
+        this.magnetActive = false;
+    }
+
+    getMagnetRange() {
+        return this.magnetActive ? 200 : this.baseMagnetRange;
+    }
+
     isAlive() {
         return this.lives > 0;
     }
 
     destroy() {
+        if (this.shieldGraphic) {
+            this.shieldGraphic.destroy();
+            this.shieldGraphic = null;
+        }
         // Stop any running blink tween
         if (this.blinkTween && this.blinkTween.isPlaying()) {
             this.blinkTween.stop();

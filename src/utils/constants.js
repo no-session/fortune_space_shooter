@@ -71,7 +71,8 @@ export const FORMATION_TYPES = {
     GRID: 'grid',
     CIRCLE: 'circle',
     WAVE: 'wave',
-    DIAMOND: 'diamond'
+    DIAMOND: 'diamond',
+    SPIRAL: 'spiral'
 };
 
 // Colors
@@ -140,6 +141,59 @@ export const EFFECT_CONFIG = {
     COLOR_GRAZE: '#00ffff',
     COLOR_PERFECT: '#00ff00'
 };
+
+// Power-Up Types
+export const POWERUP_TYPES = {
+    SHIELD: 'shield',
+    RAPID_FIRE: 'rapid_fire',
+    SCREEN_NUKE: 'screen_nuke',
+    MAGNET: 'magnet'
+};
+
+// Power-Up Configuration
+export const POWERUP_CONFIG = {
+    [POWERUP_TYPES.SHIELD]: {
+        duration: 0,           // Permanent until hits consumed
+        color: 0x0088ff,
+        glowColor: 0x00aaff,
+        label: 'S',
+        hitsAbsorbed: 3,
+        dropChance: 0.03       // 3% of kills
+    },
+    [POWERUP_TYPES.RAPID_FIRE]: {
+        duration: 10000,       // 10 seconds
+        color: 0xff3333,
+        glowColor: 0xff5555,
+        label: 'R',
+        dropChance: 0.03       // 3% of kills
+    },
+    [POWERUP_TYPES.SCREEN_NUKE]: {
+        duration: 0,           // Instant
+        color: 0xffffff,
+        glowColor: 0xffffaa,
+        label: 'N',
+        dropChance: 0.02       // 2% of kills (rare)
+    },
+    [POWERUP_TYPES.MAGNET]: {
+        duration: 8000,        // 8 seconds
+        color: 0xffdd00,
+        glowColor: 0xffee44,
+        label: 'M',
+        magnetRange: 200,
+        dropChance: 0.02       // 2% of kills
+    }
+};
+
+// Total power-up drop chance (~10% of kills)
+export const POWERUP_DROP_CHANCE = 0.10;
+
+// Kill Milestone Configuration
+export const KILL_MILESTONES = [
+    { kills: 50, text: '🔥 50 KILLS!', color: '#ff6600', confetti: false },
+    { kills: 100, text: '💯 100 KILLS!', color: '#ff00ff', confetti: true },
+    { kills: 250, text: '⚡ DESTROYER!', color: '#00ffff', confetti: false },
+    { kills: 500, text: '👑 LEGEND!', color: '#ffd700', confetti: true }
+];
 
 // Boss Types
 export const BOSS_TYPES = {

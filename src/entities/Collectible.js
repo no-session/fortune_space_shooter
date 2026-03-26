@@ -88,13 +88,14 @@ export default class Collectible extends Phaser.Physics.Arcade.Sprite {
         // Magnetic attraction to player
         if (player && player.active && player.body && !this.isFading) {
             const distance = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
+            const effectiveRange = (player.getMagnetRange) ? player.getMagnetRange() : this.magnetRange;
 
-            if (distance < this.magnetRange) {
+            if (distance < effectiveRange) {
                 // Calculate direction to player
                 const angle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
 
                 // Stronger attraction when closer
-                const strength = this.magnetStrength * (1 - distance / this.magnetRange);
+                const strength = this.magnetStrength * (1 - distance / effectiveRange);
 
                 if (this.body) {
                     this.setVelocity(
