@@ -40,7 +40,18 @@ export default async function handler(req, res) {
       body: JSON.stringify({ chat_id: chatId, text })
     }).catch(() => {});
 
-    return res.status(200).json({ ok: true });
+    // Check if Papa might be sleeping (9 PM - 5 AM PST)
+    const now = new Date();
+    const pst = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+    const hour = pst.getHours();
+    const isSleepTime = hour >= 21 || hour < 5;
+
+    let sleepNote = null;
+    if (isSleepTime) {
+      sleepNote = "😴 Papa might be sleeping right now, but he'll see your message and reply when he wakes up! Keep playing! 🚀";
+    }
+
+    return res.status(200).json({ ok: true, sleepNote });
   }
 
   if (action === 'poll') {

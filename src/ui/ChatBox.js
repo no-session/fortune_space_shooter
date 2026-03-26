@@ -158,11 +158,15 @@ export default class ChatBox {
     this.addMessageToUI('ridhaan', text);
 
     try {
-      await fetch('/api/chat', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'send', message: text, from: 'ridhaan' })
       });
+      const data = await res.json();
+      if (data.sleepNote) {
+        this.addMessageToUI('system', data.sleepNote);
+      }
     } catch {
       // Silent fail
     }
