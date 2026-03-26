@@ -65,20 +65,17 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         // Create exhaust sprite behind the player
         // Check if the texture exists before creating the sprite
         if (!this.scene.textures.exists('exhaust_1')) {
-            console.warn('Exhaust texture not loaded, skipping exhaust effect');
             this.exhaust = null;
             return;
         }
-        
+
         this.exhaust = this.scene.add.sprite(this.x, this.y + 30, 'exhaust_1');
         this.exhaust.setScale(0.6);
         this.exhaust.setDepth(99);
-        
+
         // Check if animation exists before playing
         if (this.scene.anims.exists('exhaust')) {
             this.exhaust.play('exhaust');
-        } else {
-            console.warn('Exhaust animation not found');
         }
     }
 
@@ -96,17 +93,6 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     update(time) {
         // Safety check - don't update if physics body doesn't exist
         if (!this.body || !this.active) {
-            // Only log once to avoid console spam
-            if (!this._bodyErrorLogged) {
-                console.warn('Player body or active is false, attempting recovery...', {
-                    body: !!this.body,
-                    active: this.active,
-                    lives: this.lives,
-                    isDying: this.isDying
-                });
-                this._bodyErrorLogged = true;
-            }
-
             // Attempt to recover if player should be alive
             if (this.lives > 0 && !this.isDying && this.scene) {
                 // Recreate physics body if missing
@@ -120,14 +106,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
                 }
                 this.setVisible(true);
                 this.setAlpha(1);
-                console.log('Player recovered successfully');
-                this._bodyErrorLogged = false;
             }
             return;
         }
-
-        // Reset error flag when everything is working
-        this._bodyErrorLogged = false;
 
         // Don't update if dying
         if (this.isDying) {
@@ -135,46 +116,18 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
             return;
         }
 
-        // CRITICAL VISIBILITY CHECK - Log any visibility issues
+        // Visibility safety check
         if (this.lives > 0 && !this.isDying) {
-            const isVisible = this.visible;
-            const currentAlpha = this.alpha;
-
-            // If player should be visible but isn't, log everything
-            if (!isVisible || currentAlpha < 0.1) {
-                console.error('CRITICAL: Player is invisible!', {
-                    visible: isVisible,
-                    alpha: currentAlpha,
-                    lives: this.lives,
-                    isDying: this.isDying,
-                    invincible: this.invincible,
-                    active: this.active,
-                    x: this.x,
-                    y: this.y,
-                    blinkTweenPlaying: this.blinkTween ? this.blinkTween.isPlaying() : false
-                });
-
-                // FORCE visibility
+            if (!this.visible || this.alpha < 0.1) {
                 this.setAlpha(1);
                 this.setVisible(true);
                 this.setActive(true);
-                console.error('Forced player to be visible!');
             }
 
-            // SAFETY: If player is alive and not invincible, ensure full visibility
-            // If invincible, ensure alpha is at least 0.5 (blink range)
             if (!this.invincible && this.alpha < 1.0) {
-                console.warn('Player not invincible but not fully visible! Forcing alpha to 1', {
-                    alpha: this.alpha,
-                    visible: this.visible
-                });
                 this.setAlpha(1);
                 this.setVisible(true);
             } else if (this.invincible && this.alpha < 0.5) {
-                console.warn('Player invincible but too transparent! Forcing alpha to 0.5', {
-                    alpha: this.alpha,
-                    visible: this.visible
-                });
                 this.setAlpha(0.5);
                 this.setVisible(true);
             }
@@ -357,13 +310,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
                 this.exhaust.setVisible(false);
             }
 
-            console.log(`Player died. Lives remaining: ${this.lives}. Respawning...`);
-
             // Respawn after short delay
             if (this.scene && this.scene.time) {
                 this.scene.time.delayedCall(500, () => {
-                    console.log('Respawning player...');
-
                     // Reset player state
                     this.health = this.maxHealth;
                     this.setPosition(this.scene.scale.width / 2, this.scene.scale.height - 50);
@@ -379,12 +328,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
                         this.exhaust.setVisible(true);
                     }
 
-                    console.log('Player respawned. Alpha:', this.alpha, 'Visible:', this.visible);
-
                     // Stop any existing blink tweens first
                     if (this.blinkTween) {
                         if (this.blinkTween.isPlaying()) {
-                            console.warn('Stopping existing blink tween before starting new one');
                             this.blinkTween.stop();
                         }
                         this.blinkTween = null;
@@ -397,23 +343,17 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
                         duration: 150,
                         repeat: 10,
                         yoyo: true,
-                        onStart: () => {
-                            console.log('Blink tween started');
-                        },
                         onComplete: () => {
-                            console.log('Blink tween completed');
                             // FORCE full visibility when tween completes
                             if (this.active) {
                                 this.setAlpha(1);
                                 this.setVisible(true);
-                                console.log('Blink complete. Alpha reset to 1');
                             }
                         }
                     });
 
                     // End invincibility after 2 seconds
                     this.scene.time.delayedCall(2000, () => {
-                        console.log('Invincibility ending...');
                         this.invincible = false;
 
                         // FORCE full visibility
@@ -427,8 +367,6 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
                             this.blinkTween.stop();
                         }
                         this.blinkTween = null;
-
-                        console.log('Player fully visible. Alpha:', this.alpha);
                     });
                 });
             }
@@ -454,7 +392,6 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     createDeathExplosion() {
         // Check if explosion texture exists
         if (!this.scene.textures.exists('explosion1_1')) {
-            console.warn('Explosion texture not loaded');
             return;
         }
         

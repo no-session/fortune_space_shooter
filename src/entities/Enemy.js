@@ -181,11 +181,11 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
             this.scene.soundManager.playExplosion();
         }
         
-        // Drop collectible
-        if (Math.random() < this.dropChance) {
-            this.dropCollectible();
+        // Notify scene of kill (handles score, collectible drops, wave manager)
+        if (this.scene && this.scene.onEnemyKilled) {
+            this.scene.onEnemyKilled(this);
         }
-        
+
         // Remove from formation if in one
         if (this.formation) {
             this.formation.removeEnemy(this);
@@ -200,18 +200,10 @@ export default class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.destroy();
     }
 
-    dropCollectible() {
-        // Trigger collectible drop in scene
-        if (this.scene && this.scene.onEnemyKilled) {
-            this.scene.onEnemyKilled(this);
-        }
-    }
-
     onWorldBounds() {
         // Handle world bounds collision
         if (this.body && this.body.blocked.down) {
             // Enemy reached bottom - count it and remove
-            console.log('Enemy left screen (bottom)');
 
             // Remove from formation if in one
             if (this.formation) {

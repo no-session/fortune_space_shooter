@@ -137,9 +137,6 @@ export default class GameScene extends Phaser.Scene {
                     bullet.destroy();
                     this.bonusSystem.recordShotHit(); // Track accuracy
                     enemy.takeDamage(10);
-                    if (enemy.health <= 0) {
-                        this.onEnemyKilled(enemy);
-                    }
                 }
             }
         );
@@ -390,10 +387,11 @@ export default class GameScene extends Phaser.Scene {
         this.bosses.children.entries.forEach(boss => {
             if (boss && boss.active) {
                 boss.update(time);
-                
-                // Check boss bullets vs player
-                if (boss.bullets) {
-                    this.physics.overlap(
+
+                // Set up boss bullet collision once per boss
+                if (boss.bullets && !boss._bulletOverlapSetup) {
+                    boss._bulletOverlapSetup = true;
+                    this.physics.add.overlap(
                         boss.bullets,
                         this.player,
                         (bullet, player) => {
@@ -454,7 +452,6 @@ export default class GameScene extends Phaser.Scene {
         
         // Check for wave completion (only if not already transitioning)
         if (this.waveManager.isWaveComplete() && !this.waveTransitioning) {
-            console.log('Wave complete! Starting next wave transition...');
             this.nextWave();
         }
         
@@ -478,6 +475,13 @@ export default class GameScene extends Phaser.Scene {
                 bullet.destroy();
             }
         }
+
+        // Clean up inactive/destroyed enemies from group
+        this.enemies.children.entries.slice().forEach(enemy => {
+            if (!enemy || !enemy.active) {
+                this.enemies.remove(enemy, true, true);
+            }
+        });
 
         // Clean up off-screen boss bullets (critical fix: boss bullets weren't being cleaned up)
         this.bosses.children.entries.forEach(boss => {

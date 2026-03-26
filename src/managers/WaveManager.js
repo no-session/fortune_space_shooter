@@ -10,16 +10,13 @@ export default class WaveManager {
     }
 
     startWave(waveNumber) {
-        console.log(`Starting wave ${waveNumber}...`);
         this.currentWave = waveNumber;
         this.waveComplete = false;
         this.bossWave = waveNumber % 5 === 0 && waveNumber > 0;
 
         if (this.bossWave) {
-            console.log('This is a boss wave!');
             this.startBossWave();
         } else {
-            console.log('This is a normal wave');
             this.startNormalWave();
         }
     }
@@ -37,28 +34,6 @@ export default class WaveManager {
         const formationCount = Math.min(1 + Math.floor(this.currentWave / 4), 3);
 
         this.enemiesRemaining = enemyCount * formationCount;
-
-        // Determine enemy types based on wave (delayed introduction of harder enemies)
-        let enemyType = ENEMY_TYPES.SCOUT;
-        if (this.currentWave >= 4) {
-            // Introduce fighters at wave 4, but keep scouts more common
-            enemyType = Math.random() < 0.7 ? ENEMY_TYPES.SCOUT : ENEMY_TYPES.FIGHTER;
-        }
-        if (this.currentWave >= 8) {
-            // Introduce bombers at wave 8
-            const rand = Math.random();
-            if (rand < 0.2) enemyType = ENEMY_TYPES.BOMBER;
-            else if (rand < 0.5) enemyType = ENEMY_TYPES.FIGHTER;
-            else enemyType = ENEMY_TYPES.SCOUT;
-        }
-        if (this.currentWave >= 12) {
-            // Introduce elites at wave 12
-            const rand = Math.random();
-            if (rand < 0.1) enemyType = ENEMY_TYPES.ELITE;
-            else if (rand < 0.3) enemyType = ENEMY_TYPES.BOMBER;
-            else if (rand < 0.6) enemyType = ENEMY_TYPES.FIGHTER;
-            else enemyType = ENEMY_TYPES.SCOUT;
-        }
 
         // Spawn formations with longer delays for breathing room
         const formationTypes = [
@@ -78,6 +53,7 @@ export default class WaveManager {
             const startY = -50 - i * 100;
 
             this.scene.time.delayedCall(delay, () => {
+                const enemyType = this.getEnemyTypeForWave();
                 formationManager.createFormation(
                     formationType,
                     enemyType,
@@ -87,6 +63,26 @@ export default class WaveManager {
                 );
             });
         }
+    }
+
+    getEnemyTypeForWave() {
+        if (this.currentWave >= 12) {
+            const rand = Math.random();
+            if (rand < 0.1) return ENEMY_TYPES.ELITE;
+            else if (rand < 0.3) return ENEMY_TYPES.BOMBER;
+            else if (rand < 0.6) return ENEMY_TYPES.FIGHTER;
+            else return ENEMY_TYPES.SCOUT;
+        }
+        if (this.currentWave >= 8) {
+            const rand = Math.random();
+            if (rand < 0.2) return ENEMY_TYPES.BOMBER;
+            else if (rand < 0.5) return ENEMY_TYPES.FIGHTER;
+            else return ENEMY_TYPES.SCOUT;
+        }
+        if (this.currentWave >= 4) {
+            return Math.random() < 0.7 ? ENEMY_TYPES.SCOUT : ENEMY_TYPES.FIGHTER;
+        }
+        return ENEMY_TYPES.SCOUT;
     }
 
     startBossWave() {
@@ -100,8 +96,6 @@ export default class WaveManager {
         const bossIndex = Math.floor((this.currentWave / 5) - 1) % BOSS_WAVE_SEQUENCE.length;
         const bossType = BOSS_WAVE_SEQUENCE[bossIndex];
 
-        console.log(`Spawning boss: ${bossType} (wave ${this.currentWave}, index ${bossIndex})`);
-
         this.scene.time.delayedCall(500, () => {
             if (this.scene.spawnBoss) {
                 this.scene.spawnBoss(bossType, bossX, bossY);
@@ -113,13 +107,11 @@ export default class WaveManager {
         // Only decrement if there are enemies remaining (prevent negative counts)
         if (this.enemiesRemaining > 0) {
             this.enemiesRemaining--;
-            console.log(`Enemy killed. Enemies remaining: ${this.enemiesRemaining}`);
         }
 
         // Only mark complete once
         if (this.enemiesRemaining <= 0 && !this.waveComplete) {
             this.waveComplete = true;
-            console.log('Wave marked as complete!');
         }
     }
 

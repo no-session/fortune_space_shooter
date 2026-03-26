@@ -166,6 +166,7 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
             bullet.setVelocityX(i * (spacing * 2));
             bullet.setScale(1.2);
             bullet.setDepth(50);
+            bullet.body.setAllowGravity(false);
             this.bullets.add(bullet);
         }
     }
@@ -180,6 +181,7 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
                 bullet.setVelocityX(Phaser.Math.Between(-50, 50));
                 bullet.setScale(1.5);
                 bullet.setDepth(50);
+                bullet.body.setAllowGravity(false);
                 this.bullets.add(bullet);
             });
         }
@@ -194,6 +196,7 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
             bullet.setVelocityY(Math.sin(angle) * speed);
             bullet.setScale(1.3);
             bullet.setDepth(50);
+            bullet.body.setAllowGravity(false);
             this.bullets.add(bullet);
         }
     }
@@ -219,6 +222,7 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
             bullet.setVelocityY(dir.y * speed);
             bullet.setScale(1.4);
             bullet.setDepth(50);
+            bullet.body.setAllowGravity(false);
             this.bullets.add(bullet);
         }
     }
@@ -283,6 +287,7 @@ export default class Boss extends Phaser.Physics.Arcade.Sprite {
             bullet.setVelocityY(Math.sin(angle) * 200);
             bullet.setScale(1);
             bullet.setDepth(50);
+            bullet.body.setAllowGravity(false);
             this.bullets.add(bullet);
         }
     }
