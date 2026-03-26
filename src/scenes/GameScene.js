@@ -23,6 +23,9 @@ import Pet from '../entities/Pet.js';
 import MusicManager from '../managers/MusicManager.js';
 import StatsTracker from '../managers/StatsTracker.js';
 import ParticleEngine from '../systems/ParticleEngine.js';
+import ReplayManager from '../managers/ReplayManager.js';
+import TipsManager from '../managers/TipsManager.js';
+import HUDConfig from '../ui/HUDConfig.js';
 import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS, WEAPON_TYPES, WEAPON_CONFIG, WEAPON_UPGRADE_NAMES, HAZARD_TYPES, HAZARD_CONFIG, DRONE_CONFIG, PET_TYPES, PET_CONFIG, ACHIEVEMENT_REWARDS, WEATHER_TYPES, WEATHER_CONFIG, MINI_BOSS_CONFIG } from '../utils/constants.js';
 
 export default class GameScene extends Phaser.Scene {
@@ -30,9 +33,17 @@ export default class GameScene extends Phaser.Scene {
         super({ key: 'GameScene' });
     }
 
+    init(data) {
+        // Endless mode flag passed from menu
+        this._initEndlessMode = data && data.endlessMode === true;
+    }
+
     create() {
         // Fade in
         this.cameras.main.fadeIn(300, 0, 0, 0);
+
+        // Endless mode setup
+        this.endlessMode = this._initEndlessMode || false;
 
         // Load difficulty settings
         const difficultyKey = localStorage.getItem('fortune-difficulty') || 'NORMAL';
@@ -44,11 +55,32 @@ export default class GameScene extends Phaser.Scene {
         // Initialize managers
         this.formationManager = new FormationManager(this);
         this.waveManager = new WaveManager(this);
+        this.waveManager.endlessMode = this.endlessMode;
         this.scoreManager = new ScoreManager(this);
         this.soundManager = new SoundManager(this);
         this.streakManager = new StreakManager(this);
         this.effectManager = new EffectManager(this);
         this.bonusSystem = new BonusSystem(this);
+
+        // HUD configuration
+        this.hudConfig = new HUDConfig();
+
+        // Replay manager
+        this.replayManager = new ReplayManager();
+
+        // Tips manager
+        this.tipsManager = new TipsManager(this);
+
+        // Color blind mode
+        this.colorBlindMode = localStorage.getItem('fortune-color-blind') === 'true';
+
+        // Combo finisher state
+        this.finisherReady = false;
+        this.finisherButton = null;
+        this.finisherText = null;
+        this.finisherTimer = null;
+        this.finisherActive = false;
+        this.finisherEndTime = 0;
 
         // Create player
         this.player = new Player(this, this.scale.width / 2, this.scale.height - 50);
@@ -235,6 +267,17 @@ export default class GameScene extends Phaser.Scene {
         this.emoteKeys[3].on('down', () => this.showEmote(3));
         this.emoteKeys[4].on('down', () => this.showEmote(4));
         this.emoteCooldown = false;
+
+        // F key for combo finisher
+        this.finisherKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F);
+        this.finisherKey.on('down', () => this.activateFinisher());
+
+        // Track weapon switch for tips
+        const origCycleWeapon = this.player.cycleWeapon.bind(this.player);
+        this.player.cycleWeapon = () => {
+            origCycleWeapon();
+            if (this.tipsManager) this.tipsManager.onWeaponSwitch();
+        };
 
         // Camera: subtle follow player with lerp
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
@@ -427,8 +470,9 @@ export default class GameScene extends Phaser.Scene {
                     let damage = isCrit ? 20 : 10;
                     if (this.pet) damage += this.pet.getExtraDamage();
                     if (this.achievementDamageBonus) damage = Math.floor(damage * (1 + this.achievementDamageBonus));
+                    if (this.finisherActive) damage *= 3;
                     enemy.takeDamage(damage);
-                    this.showDamageNumber(enemy.x, enemy.y, damage, isCrit);
+                    this.showDamageNumber(enemy.x, enemy.y, damage, isCrit || this.finisherActive);
                 }
             }
         );
@@ -445,8 +489,9 @@ export default class GameScene extends Phaser.Scene {
                     let damage = isCrit ? 20 : 10;
                     if (this.pet) damage += this.pet.getExtraDamage();
                     if (this.achievementDamageBonus) damage = Math.floor(damage * (1 + this.achievementDamageBonus));
+                    if (this.finisherActive) damage *= 3;
                     boss.takeDamage(damage);
-                    this.showDamageNumber(boss.x, boss.y, damage, isCrit);
+                    this.showDamageNumber(boss.x, boss.y, damage, isCrit || this.finisherActive);
                 }
             }
         );
@@ -585,6 +630,23 @@ export default class GameScene extends Phaser.Scene {
         // Boss bullets vs player (set up in update loop for dynamic tracking)
     }
 
+    applyHUDVisibility() {
+        if (!this.hudConfig) return;
+        const vis = (key) => this.hudConfig.isVisible(key);
+        if (this.scoreText) this.scoreText.setVisible(vis('score'));
+        if (this.multiplierBadge) this.multiplierBadge.setVisible(vis('score'));
+        if (this.comboText) this.comboText.setVisible(vis('combo'));
+        if (this.livesText) this.livesText.setVisible(vis('lives'));
+        if (this.waveText) this.waveText.setVisible(vis('wave'));
+        if (this.healthBarBg) this.healthBarBg.setVisible(vis('healthBar'));
+        if (this.healthBarFill) this.healthBarFill.setVisible(vis('healthBar'));
+        if (this.healthText) this.healthText.setVisible(vis('healthBar'));
+        if (this.accuracyText) this.accuracyText.setVisible(vis('accuracy'));
+        if (this.streakText) this.streakText.setVisible(vis('streak'));
+        if (this.currencyText) this.currencyText.setVisible(vis('currency'));
+        if (this.radarBg) this.radarBg.setVisible(vis('radar'));
+    }
+
     createUI() {
         // Score text
         this.scoreText = this.add.text(10, 10, 'Score: 0', {
@@ -721,6 +783,23 @@ export default class GameScene extends Phaser.Scene {
         if (this.touchControls) {
             this.createWeaponSwitchButton();
         }
+
+        // Endless mode HUD indicator
+        if (this.endlessMode) {
+            this.endlessBadge = this.add.text(this.scale.width / 2, 10, 'ENDLESS MODE', {
+                fontSize: '14px',
+                fontFamily: 'monospace',
+                color: '#ff00ff',
+                stroke: '#000000',
+                strokeThickness: 2,
+                fontStyle: 'bold'
+            });
+            this.endlessBadge.setOrigin(0.5, 0);
+            this.endlessBadge.setDepth(1002);
+        }
+
+        // Apply HUD visibility preferences
+        this.applyHUDVisibility();
     }
 
     createRadar() {
@@ -742,6 +821,9 @@ export default class GameScene extends Phaser.Scene {
         // Clean old dots
         this.radarDots.forEach(d => { if (d) d.destroy(); });
         this.radarDots = [];
+
+        // Skip if radar hidden
+        if (this.hudConfig && !this.hudConfig.isVisible('radar')) return;
 
         const cx = this.radarCenter.x;
         const cy = this.radarCenter.y;
@@ -924,7 +1006,14 @@ export default class GameScene extends Phaser.Scene {
             else if (healthPct <= 0.5) barColor = 0xffff00;
             this.healthBarFill.setFillStyle(barColor);
 
-            this.healthText.setText(`HP: ${this.player.health}/${this.player.maxHealth}`);
+            // Color blind mode: show bigger numeric HP
+            if (this.colorBlindMode) {
+                this.healthText.setText(`HP: ${this.player.health}/${this.player.maxHealth}`);
+                this.healthText.setFontSize('16px');
+                this.healthText.setStyle({ fontStyle: 'bold' });
+            } else {
+                this.healthText.setText(`HP: ${this.player.health}/${this.player.maxHealth}`);
+            }
         }
 
         // Update weapon display with upgrade name
@@ -1008,12 +1097,42 @@ export default class GameScene extends Phaser.Scene {
                 if (currentCombo === COMBO_ANNOUNCEMENTS[i].combo) {
                     this.effectManager.showComboAnnouncement(currentCombo);
                     this.lastComboAnnouncement = currentCombo;
+                    // Color blind mode: add shape indicators alongside combo text
+                    if (this.colorBlindMode) {
+                        const shapes = ['diamond', 'triangle', 'star', 'hexagon', 'circle'];
+                        const shapeName = shapes[Math.min(i, shapes.length - 1)];
+                        this.effectManager.showScorePopup(
+                            this.scale.width / 2, this.scale.height / 2 + 40,
+                            `[${shapeName.toUpperCase()}] x${currentCombo}`,
+                            { color: '#ffffff', size: '18px', prefix: '' }
+                        );
+                    }
                     break;
                 }
             }
         }
         if (currentCombo === 0) {
             this.lastComboAnnouncement = 0;
+        }
+
+        // --- COMBO FINISHER CHECK ---
+        if (currentCombo >= 25 && !this.finisherReady && !this.finisherActive) {
+            this.showFinisherButton();
+        }
+
+        // --- FINISHER ACTIVE: Upgrade bullets ---
+        if (this.finisherActive && Date.now() > this.finisherEndTime) {
+            this.finisherActive = false;
+        }
+
+        // --- REPLAY RECORDING ---
+        if (this.replayManager) {
+            this.replayManager.record(this.player, time);
+        }
+
+        // --- DYNAMIC TIPS ---
+        if (this.tipsManager) {
+            this.tipsManager.update(time);
         }
 
         // Daily challenge progress tracking
@@ -1161,6 +1280,12 @@ export default class GameScene extends Phaser.Scene {
                 if (powerup.update) {
                     powerup.update(this.player);
                 }
+                // Color blind mode: make power-up labels larger and more prominent
+                if (this.colorBlindMode && powerup.label && !powerup._cbEnhanced) {
+                    powerup._cbEnhanced = true;
+                    powerup.label.setFontSize('22px');
+                    powerup.label.setStroke('#000000', 3);
+                }
                 if (powerup.y > this.scale.height + 50) {
                     powerup.destroy();
                 }
@@ -1195,6 +1320,22 @@ export default class GameScene extends Phaser.Scene {
             const bullet = enemyBulletsList[i];
             if (bullet && (bullet.y > this.scale.height + 50 || bullet.y < -50)) {
                 bullet.destroy();
+            }
+            // Color blind mode: add square outline marker to enemy bullets
+            if (this.colorBlindMode && bullet && bullet.active && !bullet._cbMarker) {
+                bullet._cbMarker = true;
+                const marker = this.add.rectangle(0, 0, 12, 12);
+                marker.setStrokeStyle(2, 0xff4444, 0.9);
+                marker.setFillStyle(0xff4444, 0);
+                marker.setDepth(51);
+                bullet._cbGraphic = marker;
+            }
+            // Update color blind marker position
+            if (bullet && bullet.active && bullet._cbGraphic) {
+                bullet._cbGraphic.setPosition(bullet.x, bullet.y);
+            } else if (bullet && bullet._cbGraphic && !bullet.active) {
+                bullet._cbGraphic.destroy();
+                bullet._cbGraphic = null;
             }
         }
 
@@ -1505,7 +1646,8 @@ export default class GameScene extends Phaser.Scene {
             }
         } else {
             // Drop power-up (difficulty-adjusted chance, separate from collectibles)
-            const adjustedDropChance = POWERUP_DROP_CHANCE * (this.difficulty ? this.difficulty.powerUpDropMultiplier : 1) * this.autoDifficultyDropMod;
+            const endlessMult = this.getEndlessPowerUpDropMultiplier();
+            const adjustedDropChance = POWERUP_DROP_CHANCE * (this.difficulty ? this.difficulty.powerUpDropMultiplier : 1) * this.autoDifficultyDropMod * endlessMult;
             if (Math.random() < adjustedDropChance) {
                 this.dropPowerUp(enemy.x, enemy.y);
             }
@@ -1657,8 +1799,8 @@ export default class GameScene extends Phaser.Scene {
 
                 // Screen wipe transition, then countdown, then spawn
                 ScreenWipe.random(this, 800, () => {
-                    // If boss wave, go to shop, then possibly bonus stage
-                    if (this.waveManager.isBossWave()) {
+                    // If boss wave, go to shop (unless endless mode), then possibly bonus stage
+                    if (this.waveManager.isBossWave() && !this.endlessMode) {
                         this.waveManager.startWave(nextWaveNum);
                         this.bonusSystem.startWave(nextWaveNum);
                         this.showWaveNameDisplay(nextWaveNum);
@@ -2394,6 +2536,28 @@ export default class GameScene extends Phaser.Scene {
         this.radarDots.forEach(d => { if (d) d.destroy(); });
         this.radarDots = [];
 
+        // Save replay data
+        if (this.replayManager) {
+            this.replayManager.save();
+        }
+
+        // Cleanup tips
+        if (this.tipsManager) {
+            this.tipsManager.destroy();
+        }
+
+        // Cleanup finisher
+        this.clearFinisherButton();
+
+        // Save endless best wave
+        if (this.endlessMode) {
+            const currentBest = parseInt(localStorage.getItem('fortune-endless-best-wave') || '0', 10);
+            const waveReached = this.waveManager.getCurrentWave();
+            if (waveReached > currentBest) {
+                localStorage.setItem('fortune-endless-best-wave', waveReached.toString());
+            }
+        }
+
         // Award XP
         const finalScore = this.scoreManager.getScore();
         if (this.xpManager) {
@@ -2423,7 +2587,8 @@ export default class GameScene extends Phaser.Scene {
             powerupsCollected: this.powerupsCollected,
             timePlayed: Date.now() - this.gameStartTime,
             achievementsUnlocked: this.achievementManager ? this.achievementManager.getSessionUnlocked() : [],
-            xpResult: this._xpResult || null
+            xpResult: this._xpResult || null,
+            endlessMode: this.endlessMode
         };
 
         // If fade hasn't been set up (fallback), launch immediately
@@ -2991,6 +3156,7 @@ export default class GameScene extends Phaser.Scene {
     onPlayerDeath() {
         this.deathsThisWave++;
         StatsTracker.recordDeath();
+        if (this.tipsManager) this.tipsManager.onPlayerDeath();
         if (this.deathsThisWave >= 3 && !this.autoDifficultyActive) {
             this.autoDifficultyActive = true;
             this.autoDifficultyEnemySpeedMod = 0.85; // 15% slower bullets
@@ -3329,6 +3495,147 @@ export default class GameScene extends Phaser.Scene {
                 repeat: 5
             });
         }
+    }
+
+    // --- COMBO FINISHER MOVE ---
+    showFinisherButton() {
+        if (this.finisherReady) return;
+        this.finisherReady = true;
+
+        const btnX = this.scale.width / 2;
+        const btnY = this.scale.height - 60;
+
+        // Glowing button
+        this.finisherButton = this.add.rectangle(btnX, btnY, 180, 50, 0x00ffff, 0.3);
+        this.finisherButton.setStrokeStyle(3, 0x00ffff, 1);
+        this.finisherButton.setDepth(1010);
+        this.finisherButton.setInteractive({ useHandCursor: true });
+        this.finisherButton.on('pointerdown', () => this.activateFinisher());
+
+        this.finisherText = this.add.text(btnX, btnY, 'FINISHER! [F]', {
+            fontSize: '20px',
+            fontFamily: 'monospace',
+            color: '#00ffff',
+            fontStyle: 'bold',
+            stroke: '#003366',
+            strokeThickness: 3
+        });
+        this.finisherText.setOrigin(0.5);
+        this.finisherText.setDepth(1011);
+
+        // Glow pulse animation
+        this.tweens.add({
+            targets: [this.finisherButton, this.finisherText],
+            alpha: { from: 1, to: 0.5 },
+            duration: 400,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+
+        // Scale pulse on button
+        this.tweens.add({
+            targets: this.finisherButton,
+            scaleX: { from: 1, to: 1.05 },
+            scaleY: { from: 1, to: 1.05 },
+            duration: 600,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+
+        // Auto-remove after 3 seconds if not pressed
+        this.finisherTimer = this.time.delayedCall(3000, () => {
+            this.clearFinisherButton();
+        });
+    }
+
+    clearFinisherButton() {
+        this.finisherReady = false;
+        if (this.finisherButton) {
+            this.finisherButton.destroy();
+            this.finisherButton = null;
+        }
+        if (this.finisherText) {
+            this.finisherText.destroy();
+            this.finisherText = null;
+        }
+        if (this.finisherTimer) {
+            this.finisherTimer.destroy();
+            this.finisherTimer = null;
+        }
+    }
+
+    activateFinisher() {
+        if (!this.finisherReady) return;
+        this.clearFinisherButton();
+        this.finisherActive = true;
+        this.finisherEndTime = Date.now() + 5000; // 5 seconds
+
+        // Reset combo
+        if (this.scoreManager) {
+            this.scoreManager.combo = 0;
+            this.scoreManager.comboMultiplier = 1;
+            this.scoreManager.comboTimer = 0;
+        }
+
+        // Screen flash + slowmo
+        this.effectManager.screenFlash(0x00ffff, 400);
+        this.time.timeScale = 0.3;
+
+        // FINISHER! text
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2;
+        const finText = this.add.text(centerX, centerY, 'FINISHER!', {
+            fontSize: '64px',
+            fontFamily: 'monospace',
+            color: '#00ffff',
+            stroke: '#003366',
+            strokeThickness: 8,
+            fontStyle: 'bold'
+        });
+        finText.setOrigin(0.5);
+        finText.setDepth(1020);
+        finText.setAlpha(0);
+
+        this.tweens.add({
+            targets: finText,
+            alpha: 1,
+            scale: { from: 2.5, to: 1 },
+            duration: 300,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.time.delayedCall(500, () => {
+                    this.tweens.add({
+                        targets: finText,
+                        alpha: 0,
+                        y: centerY - 50,
+                        duration: 400,
+                        onComplete: () => finText.destroy()
+                    });
+                });
+            }
+        });
+
+        // Return time to normal after 1 second (adjusted for 0.3x)
+        this.time.delayedCall(333, () => {
+            this.time.timeScale = 1;
+        });
+
+        this.cameras.main.shake(500, 0.02);
+    }
+
+    // --- COLOR BLIND MODE HELPERS ---
+    toggleColorBlindMode() {
+        this.colorBlindMode = !this.colorBlindMode;
+        localStorage.setItem('fortune-color-blind', this.colorBlindMode.toString());
+        return this.colorBlindMode;
+    }
+
+    // --- ENDLESS MODE: Skip shop, increase power-up drops ---
+    // Override nextWave for endless mode
+    getEndlessPowerUpDropMultiplier() {
+        return this.endlessMode ? 1.5 : 1;
     }
 
     // Cleanup music on scene shutdown

@@ -15,6 +15,7 @@ export default class GameOverScene extends Phaser.Scene {
         this.timePlayed = data.timePlayed || 0;
         this.achievementsUnlocked = data.achievementsUnlocked || [];
         this.xpResult = data.xpResult || null;
+        this.endlessMode = data.endlessMode || false;
     }
 
     create() {
@@ -33,7 +34,8 @@ export default class GameOverScene extends Phaser.Scene {
         this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.85);
 
         // Game Over text
-        const gameOverText = this.add.text(width / 2, 40, 'GAME OVER', {
+        const headerText = this.endlessMode ? 'ENDLESS OVER' : 'GAME OVER';
+        const gameOverText = this.add.text(width / 2, 40, headerText, {
             fontSize: '42px',
             fontFamily: 'monospace',
             color: '#ff0000',

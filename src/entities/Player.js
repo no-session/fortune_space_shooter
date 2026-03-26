@@ -483,10 +483,17 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         const bullet = this.bullets.create(x, y, texture);
         if (bullet) {
             bullet.setVelocityY(-this.bulletSpeed);
-            bullet.setScale(0.5);
             bullet.setDepth(50);
             bullet.body.allowGravity = false;
-            bullet.setTint(WEAPON_CONFIG[WEAPON_TYPES.WAVE].color);
+
+            // Finisher mode: 3x size + cyan glow
+            if (this.scene && this.scene.finisherActive) {
+                bullet.setScale(1.5);
+                bullet.setTint(0x00ffff);
+            } else {
+                bullet.setScale(0.5);
+                bullet.setTint(WEAPON_CONFIG[WEAPON_TYPES.WAVE].color);
+            }
             // Store wave properties for sine movement
             bullet.isWaveBullet = true;
             bullet.waveTime = 0;
@@ -543,9 +550,16 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         if (bullet) {
             bullet.setVelocityY(-this.bulletSpeed);
             bullet.setVelocityX(offsetX);
-            bullet.setScale(0.5);
             bullet.setDepth(50);
             bullet.body.allowGravity = false;
+
+            // Finisher mode: 3x size + cyan glow
+            if (this.scene && this.scene.finisherActive) {
+                bullet.setScale(1.5);
+                bullet.setTint(0x00ffff);
+            } else {
+                bullet.setScale(0.5);
+            }
         }
     }
 

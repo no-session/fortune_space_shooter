@@ -9,6 +9,9 @@ export default class WaveManager {
         this.bossWave = false;
         this.activeModifier = null;
 
+        // Endless mode flag — set by GameScene
+        this.endlessMode = false;
+
         // Wave summary tracking
         this.waveStartTime = 0;
         this.waveKills = 0;
@@ -18,8 +21,16 @@ export default class WaveManager {
     startWave(waveNumber) {
         this.currentWave = waveNumber;
         this.waveComplete = false;
-        this.bossWave = waveNumber % 5 === 0 && waveNumber > 0;
         this.activeModifier = null;
+
+        // Endless mode boss logic: mini-boss every 5, full boss every 10, double boss every 20
+        if (this.endlessMode) {
+            this.bossWave = waveNumber % 10 === 0 && waveNumber > 0;
+            this._endlessMiniBoss = waveNumber % 5 === 0 && waveNumber % 10 !== 0 && waveNumber > 0;
+            this._endlessDoubleBoss = waveNumber % 20 === 0 && waveNumber > 0;
+        } else {
+            this.bossWave = waveNumber % 5 === 0 && waveNumber > 0;
+        }
 
         // Track wave stats for summary
         this.waveStartTime = Date.now();
@@ -39,11 +50,30 @@ export default class WaveManager {
 
         if (this.bossWave) {
             this.startBossWave();
+            // Double boss in endless mode every 20 waves
+            if (this.endlessMode && this._endlessDoubleBoss) {
+                this.enemiesRemaining = 2;
+                this.scene.time.delayedCall(3000, () => {
+                    if (this.scene.spawnBoss) {
+                        const bossIndex2 = (Math.floor((waveNumber / 10) - 1) + 2) % BOSS_WAVE_SEQUENCE.length;
+                        this.scene.spawnBoss(BOSS_WAVE_SEQUENCE[bossIndex2],
+                            this.scene.scale.width / 2 + 100, -100);
+                    }
+                });
+            }
         } else {
             this.startNormalWave();
 
-            // Mini-boss on every 3rd non-boss wave (3, 6, 9, 12... but NOT 5, 10, 15...)
-            if (waveNumber >= 3 && waveNumber % 3 === 0 && waveNumber % 5 !== 0) {
+            // Endless mode: mini-boss every 5 waves (not full boss waves)
+            if (this.endlessMode && this._endlessMiniBoss) {
+                this.scene.time.delayedCall(2000, () => {
+                    if (this.scene.spawnMiniBoss) {
+                        this.scene.spawnMiniBoss();
+                    }
+                });
+            }
+            // Normal mode: Mini-boss on every 3rd non-boss wave
+            else if (!this.endlessMode && waveNumber >= 3 && waveNumber % 3 === 0 && waveNumber % 5 !== 0) {
                 this.scene.time.delayedCall(3000, () => {
                     if (this.scene.spawnMiniBoss) {
                         this.scene.spawnMiniBoss();
@@ -114,8 +144,15 @@ export default class WaveManager {
     startNormalWave() {
         const formationManager = this.scene.formationManager;
 
-        const enemyCount = Math.min(3 + this.currentWave, 10);
-        const formationCount = Math.min(1 + Math.floor(this.currentWave / 4), 3);
+        // Endless mode: enemy count grows +1 every 2 waves, no cap
+        let enemyCount, formationCount;
+        if (this.endlessMode) {
+            enemyCount = 4 + Math.floor(this.currentWave / 2);
+            formationCount = Math.min(1 + Math.floor(this.currentWave / 3), 5);
+        } else {
+            enemyCount = Math.min(3 + this.currentWave, 10);
+            formationCount = Math.min(1 + Math.floor(this.currentWave / 4), 3);
+        }
 
         // Apply modifier: double enemies
         const enemyMult = this.activeModifier ? (this.activeModifier.enemyMultiplier || 1) : 1;
@@ -194,7 +231,9 @@ export default class WaveManager {
     }
 
     getEnemyTypeForWave() {
-        if (this.currentWave >= 12) {
+        // Endless mode: faster type introduction
+        const effectiveWave = this.endlessMode ? Math.floor(this.currentWave * 1.5) : this.currentWave;
+        if (effectiveWave >= 12) {
             const rand = Math.random();
             if (rand < 0.08) return ENEMY_TYPES.ELITE;
             else if (rand < 0.2) return ENEMY_TYPES.SPLITTER;
@@ -202,20 +241,20 @@ export default class WaveManager {
             else if (rand < 0.6) return ENEMY_TYPES.FIGHTER;
             else return ENEMY_TYPES.SCOUT;
         }
-        if (this.currentWave >= 10) {
+        if (effectiveWave >= 10) {
             const rand = Math.random();
             if (rand < 0.15) return ENEMY_TYPES.SPLITTER;
             else if (rand < 0.3) return ENEMY_TYPES.BOMBER;
             else if (rand < 0.55) return ENEMY_TYPES.FIGHTER;
             else return ENEMY_TYPES.SCOUT;
         }
-        if (this.currentWave >= 8) {
+        if (effectiveWave >= 8) {
             const rand = Math.random();
             if (rand < 0.2) return ENEMY_TYPES.BOMBER;
             else if (rand < 0.5) return ENEMY_TYPES.FIGHTER;
             else return ENEMY_TYPES.SCOUT;
         }
-        if (this.currentWave >= 4) {
+        if (effectiveWave >= 4) {
             return Math.random() < 0.7 ? ENEMY_TYPES.SCOUT : ENEMY_TYPES.FIGHTER;
         }
         return ENEMY_TYPES.SCOUT;

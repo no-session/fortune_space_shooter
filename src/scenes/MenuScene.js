@@ -4,6 +4,7 @@ import DailyChallenge from '../managers/DailyChallenge.js';
 import XPManager from '../managers/XPManager.js';
 import { SHIP_SKINS, DIFFICULTY_MODES, PET_TYPES, PET_CONFIG, TRAIL_STYLES, ENEMY_TYPES, ENEMY_STATS, ENEMY_DESCRIPTIONS } from '../utils/constants.js';
 import StatsTracker from '../managers/StatsTracker.js';
+import ReplayManager from '../managers/ReplayManager.js';
 
 export default class MenuScene extends Phaser.Scene {
     constructor() {
@@ -485,12 +486,21 @@ export default class MenuScene extends Phaser.Scene {
             () => this.showPetsOverlay()
         );
 
+        // ENDLESS MODE button
+        this.createRetroButton(
+            width / 2 - 120,
+            buttonY + 115,
+            'ENDLESS MODE',
+            0xff00ff,
+            () => this.startEndlessMode()
+        );
+
         // CHALLENGE MODE button
         this.createRetroButton(
-            width / 2,
+            width / 2 + 120,
             buttonY + 115,
-            'CHALLENGE MODE',
-            0xff00ff,
+            'CHALLENGE',
+            0xaa44ff,
             () => this.fadeToScene('ChallengeSelectScene')
         );
 
@@ -500,9 +510,25 @@ export default class MenuScene extends Phaser.Scene {
         this.createSmallButton(width / 2 + 130, buttonY + 165, 'TRAILS', 0x44ff88, () => this.showTrailsOverlay());
 
         // HOW TO PLAY button
-        this.createSmallButton(width / 2, buttonY + 200, 'HOW TO PLAY', 0x00ff88, () => {
+        this.createSmallButton(width / 2 - 100, buttonY + 200, 'HOW TO PLAY', 0x00ff88, () => {
             this.showTutorial();
         });
+
+        // WATCH REPLAY button
+        const hasReplay = !!localStorage.getItem('fortune-ghost-replay');
+        if (hasReplay) {
+            this.createSmallButton(width / 2 + 100, buttonY + 200, 'REPLAY', 0x00cccc, () => {
+                this.showReplayOverlay();
+            });
+        }
+
+        // Endless best wave display
+        const endlessBest = parseInt(localStorage.getItem('fortune-endless-best-wave') || '0', 10);
+        if (endlessBest > 0) {
+            this.add.text(width / 2 - 120, buttonY + 140, `Best: Wave ${endlessBest}`, {
+                fontSize: '10px', fontFamily: 'monospace', color: '#ff88ff'
+            }).setOrigin(0.5, 0).setDepth(11);
+        }
 
         // STORY replay button (small)
         this.createSmallButton(width / 2 - 80, buttonY + 235, 'STORY', 0x8844ff, () => {
@@ -2407,6 +2433,110 @@ export default class MenuScene extends Phaser.Scene {
         closeBtn.on('pointerout', () => closeBtn.setFillStyle(0x111122));
         closeBtn.on('pointerdown', () => {
             this.playClickSound();
+            elements.forEach(el => { if (el && el.destroy) el.destroy(); });
+        });
+    }
+
+    startEndlessMode() {
+        this.playClickSound();
+        this.cameras.main.fadeOut(300, 0, 0, 0);
+        this.cameras.main.once('camerafadeoutcomplete', () => {
+            this.scene.start('GameScene', { endlessMode: true });
+        });
+    }
+
+    showReplayOverlay() {
+        this.playClickSound();
+        const width = this.scale.width;
+        const height = this.scale.height;
+        const elements = [];
+
+        // Overlay
+        const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.9);
+        overlay.setDepth(2000);
+        elements.push(overlay);
+
+        // Title
+        const title = this.add.text(width / 2, 80, 'GHOST REPLAY', {
+            fontSize: '32px', fontFamily: 'monospace', color: '#00ffff',
+            stroke: '#003366', strokeThickness: 4
+        });
+        title.setOrigin(0.5);
+        title.setDepth(2001);
+        elements.push(title);
+
+        const subtitle = this.add.text(width / 2, 115, 'Watching your last game...', {
+            fontSize: '14px', fontFamily: 'monospace', color: '#888888', fontStyle: 'italic'
+        });
+        subtitle.setOrigin(0.5);
+        subtitle.setDepth(2001);
+        elements.push(subtitle);
+
+        // Create starfield background for replay
+        const stars = [];
+        for (let i = 0; i < 40; i++) {
+            const star = this.add.circle(
+                Phaser.Math.Between(0, width),
+                Phaser.Math.Between(0, height),
+                Phaser.Math.Between(1, 2), 0xffffff, 0.3
+            );
+            star.setDepth(2000);
+            elements.push(star);
+            stars.push(star);
+        }
+
+        // Animate stars scrolling down
+        const starEvent = this.time.addEvent({
+            delay: 50,
+            loop: true,
+            callback: () => {
+                stars.forEach(s => {
+                    s.y += 2;
+                    if (s.y > height) {
+                        s.y = 0;
+                        s.x = Phaser.Math.Between(0, width);
+                    }
+                });
+            }
+        });
+
+        // Play the ghost replay
+        const replayManager = new ReplayManager();
+        const control = replayManager.playReplay(this, () => {
+            // Replay finished
+            subtitle.setText('Replay complete!');
+        });
+
+        // Elevate ghost depth to be above overlay
+        // The playReplay method creates sprites at depth 100 which is below overlay
+        // We need to re-read all children after a slight delay
+        this.time.delayedCall(200, () => {
+            this.children.list.forEach(child => {
+                if (child.depth >= 99 && child.depth <= 101 && !elements.includes(child)) {
+                    child.setDepth(2005);
+                }
+            });
+        });
+
+        // Close button
+        const closeBtn = this.add.rectangle(width / 2, height - 60, 150, 40, 0x00ffff);
+        closeBtn.setDepth(2010);
+        closeBtn.setInteractive({ useHandCursor: true });
+        elements.push(closeBtn);
+
+        const closeText = this.add.text(width / 2, height - 60, 'CLOSE', {
+            fontSize: '18px', fontFamily: 'monospace', color: '#000000'
+        });
+        closeText.setOrigin(0.5);
+        closeText.setDepth(2011);
+        elements.push(closeText);
+
+        closeBtn.on('pointerover', () => closeBtn.setFillStyle(0x00dddd));
+        closeBtn.on('pointerout', () => closeBtn.setFillStyle(0x00ffff));
+        closeBtn.on('pointerdown', () => {
+            this.playClickSound();
+            starEvent.destroy();
+            if (control && control.stop) control.stop();
             elements.forEach(el => { if (el && el.destroy) el.destroy(); });
         });
     }
