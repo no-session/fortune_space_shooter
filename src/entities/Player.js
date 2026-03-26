@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_CONFIG, SHIP_SKINS } from '../utils/constants.js';
+import { GAME_CONFIG, SHIP_SKINS, WEAPON_TYPES, WEAPON_CONFIG } from '../utils/constants.js';
 
 export default class Player extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y) {
@@ -33,6 +33,12 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         this.bulletSpeed = GAME_CONFIG.BULLET_SPEED;
         this.bulletSpread = 1; // number of bullets per shot
         this.weaponLevel = 1;
+
+        // Weapon type system
+        this.currentWeapon = WEAPON_TYPES.BLASTER;
+        this.availableWeapons = [WEAPON_TYPES.BLASTER]; // unlocked via XP
+        this.laserGraphic = null;
+        this.laserActive = false;
         
         // Controls
         this.cursors = scene.input.keyboard.createCursorKeys();
@@ -192,10 +198,44 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         this.spaceKey.on('down', () => {
             this.isFiring = true;
         });
-        
+
         this.spaceKey.on('up', () => {
             this.isFiring = false;
         });
+
+        // Q key to cycle weapons
+        this.qKey = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
+        this.qKey.on('down', () => {
+            this.cycleWeapon();
+        });
+    }
+
+    cycleWeapon() {
+        if (this.availableWeapons.length <= 1) return;
+        const idx = this.availableWeapons.indexOf(this.currentWeapon);
+        const nextIdx = (idx + 1) % this.availableWeapons.length;
+        this.currentWeapon = this.availableWeapons[nextIdx];
+
+        // Clean up laser if switching away
+        if (this.currentWeapon !== WEAPON_TYPES.LASER && this.laserGraphic) {
+            this.laserGraphic.destroy();
+            this.laserGraphic = null;
+            this.laserActive = false;
+        }
+
+        // Show weapon switch popup
+        if (this.scene && this.scene.effectManager) {
+            const config = WEAPON_CONFIG[this.currentWeapon];
+            this.scene.effectManager.showScorePopup(this.x, this.y - 40, config.name, {
+                color: '#ffffff', size: '18px', prefix: ''
+            });
+        }
+    }
+
+    unlockWeapon(weaponType) {
+        if (!this.availableWeapons.includes(weaponType)) {
+            this.availableWeapons.push(weaponType);
+        }
     }
 
     update(time) {
@@ -287,10 +327,24 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         }
         
         // Shooting
-        if (this.autoFire || this.isFiring) {
+        if (this.currentWeapon === WEAPON_TYPES.LASER) {
+            this.updateLaser(time);
+        } else if (this.autoFire || this.isFiring) {
             if (time > this.lastFired) {
                 this.shoot();
                 this.lastFired = time + this.fireRate;
+            }
+        }
+
+        // Update wave bullets (sine movement)
+        const bulletsList = this.bullets.children.entries.slice();
+        for (let i = bulletsList.length - 1; i >= 0; i--) {
+            const bullet = bulletsList[i];
+            if (bullet && bullet.active && bullet.isWaveBullet) {
+                bullet.waveTime += 0.15;
+                const config = WEAPON_CONFIG[WEAPON_TYPES.WAVE];
+                const offsetX = Math.sin(bullet.waveTime + bullet.wavePhase) * config.amplitude;
+                bullet.x = bullet.baseX + offsetX;
             }
         }
     }
@@ -311,6 +365,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     shoot() {
+        // Laser handled separately in update loop
+        if (this.currentWeapon === WEAPON_TYPES.LASER) return;
+
         const bulletX = this.x;
         const bulletY = this.y - 30;
 
@@ -318,21 +375,34 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         const bulletTexture = this.weaponLevel >= 3 ? 'bullet_proton1' : 'bullet_plasma1';
 
         let shotsCreated = 0;
-        if (this.bulletSpread === 1) {
-            // Single bullet
-            this.createBullet(bulletX, bulletY, 0, bulletTexture);
+
+        if (this.currentWeapon === WEAPON_TYPES.WAVE) {
+            // Wave weapon: sine-wave bullets
+            this.createWaveBullet(bulletX, bulletY, bulletTexture);
             shotsCreated = 1;
-        } else if (this.bulletSpread === 2) {
-            // Two bullets side by side
-            this.createBullet(bulletX - 15, bulletY, 0, bulletTexture);
-            this.createBullet(bulletX + 15, bulletY, 0, bulletTexture);
-            shotsCreated = 2;
-        } else if (this.bulletSpread >= 3) {
-            // Three bullets with spread
-            this.createBullet(bulletX, bulletY, 0, bulletTexture);
-            this.createBullet(bulletX - 20, bulletY, -50, bulletTexture);
-            this.createBullet(bulletX + 20, bulletY, 50, bulletTexture);
-            shotsCreated = 3;
+            if (this.bulletSpread >= 2) {
+                this.createWaveBullet(bulletX - 15, bulletY, bulletTexture, Math.PI);
+                shotsCreated = 2;
+            }
+            if (this.bulletSpread >= 3) {
+                this.createWaveBullet(bulletX + 15, bulletY, bulletTexture, Math.PI / 2);
+                shotsCreated = 3;
+            }
+        } else {
+            // Blaster: default behavior
+            if (this.bulletSpread === 1) {
+                this.createBullet(bulletX, bulletY, 0, bulletTexture);
+                shotsCreated = 1;
+            } else if (this.bulletSpread === 2) {
+                this.createBullet(bulletX - 15, bulletY, 0, bulletTexture);
+                this.createBullet(bulletX + 15, bulletY, 0, bulletTexture);
+                shotsCreated = 2;
+            } else if (this.bulletSpread >= 3) {
+                this.createBullet(bulletX, bulletY, 0, bulletTexture);
+                this.createBullet(bulletX - 20, bulletY, -50, bulletTexture);
+                this.createBullet(bulletX + 20, bulletY, 50, bulletTexture);
+                shotsCreated = 3;
+            }
         }
 
         // Track shots for accuracy bonus
@@ -346,6 +416,65 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         if (this.scene.soundManager) {
             this.scene.soundManager.playShoot();
         }
+    }
+
+    createWaveBullet(x, y, texture, phaseOffset = 0) {
+        const bullet = this.bullets.create(x, y, texture);
+        if (bullet) {
+            bullet.setVelocityY(-this.bulletSpeed);
+            bullet.setScale(0.5);
+            bullet.setDepth(50);
+            bullet.body.allowGravity = false;
+            bullet.setTint(WEAPON_CONFIG[WEAPON_TYPES.WAVE].color);
+            // Store wave properties for sine movement
+            bullet.isWaveBullet = true;
+            bullet.waveTime = 0;
+            bullet.wavePhase = phaseOffset;
+            bullet.baseX = x;
+        }
+    }
+
+    updateLaser(time) {
+        if (this.currentWeapon !== WEAPON_TYPES.LASER) {
+            if (this.laserGraphic) {
+                this.laserGraphic.destroy();
+                this.laserGraphic = null;
+                this.laserActive = false;
+            }
+            return;
+        }
+
+        if (!this.isFiring && !this.autoFire) {
+            if (this.laserGraphic) {
+                this.laserGraphic.setVisible(false);
+                this.laserActive = false;
+            }
+            return;
+        }
+
+        this.laserActive = true;
+        const config = WEAPON_CONFIG[WEAPON_TYPES.LASER];
+        const beamX = this.x;
+        const beamTopY = 0;
+        const beamBottomY = this.y - 25;
+        const beamHeight = beamBottomY - beamTopY;
+
+        if (!this.laserGraphic) {
+            this.laserGraphic = this.scene.add.rectangle(
+                beamX, beamTopY + beamHeight / 2,
+                config.beamWidth, beamHeight,
+                config.color, 0.7
+            );
+            this.laserGraphic.setDepth(95);
+        } else {
+            this.laserGraphic.setPosition(beamX, beamTopY + beamHeight / 2);
+            this.laserGraphic.setSize(config.beamWidth, beamHeight);
+            this.laserGraphic.setVisible(true);
+        }
+
+        // Pulse width for visual effect
+        const pulse = 1 + 0.3 * Math.sin(time * 0.01);
+        this.laserGraphic.setScale(pulse, 1);
     }
 
     createBullet(x, y, offsetX, texture) {
@@ -637,6 +766,10 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         if (this.shieldGraphic) {
             this.shieldGraphic.destroy();
             this.shieldGraphic = null;
+        }
+        if (this.laserGraphic) {
+            this.laserGraphic.destroy();
+            this.laserGraphic = null;
         }
         // Stop any running blink tween
         if (this.blinkTween && this.blinkTween.isPlaying()) {

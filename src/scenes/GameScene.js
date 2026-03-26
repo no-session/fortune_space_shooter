@@ -4,6 +4,8 @@ import Enemy from '../entities/Enemy.js';
 import Boss from '../entities/Boss.js';
 import Collectible from '../entities/Collectible.js';
 import PowerUp from '../entities/PowerUp.js';
+import Hazard from '../entities/Hazard.js';
+import Drone from '../entities/Drone.js';
 import FormationManager from '../managers/FormationManager.js';
 import WaveManager from '../managers/WaveManager.js';
 import ScoreManager from '../managers/ScoreManager.js';
@@ -12,10 +14,11 @@ import StreakManager from '../managers/StreakManager.js';
 import EffectManager from '../managers/EffectManager.js';
 import RandomEventManager from '../managers/RandomEventManager.js';
 import AchievementManager from '../managers/AchievementManager.js';
+import XPManager from '../managers/XPManager.js';
 import BonusSystem from '../systems/BonusSystem.js';
 import DailyChallenge from '../managers/DailyChallenge.js';
 import TouchControls from '../ui/TouchControls.js';
-import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS } from '../utils/constants.js';
+import { COLLECTIBLE_TYPES, COLLECTIBLE_VALUES, GAME_CONFIG, EFFECT_CONFIG, POWERUP_TYPES, POWERUP_CONFIG, POWERUP_DROP_CHANCE, KILL_MILESTONES, WAVE_NAMES, DIFFICULTY_MODES, COMBO_ANNOUNCEMENTS, SHIP_SKINS, WEAPON_TYPES, WEAPON_CONFIG, HAZARD_TYPES, HAZARD_CONFIG, DRONE_CONFIG } from '../utils/constants.js';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -42,11 +45,21 @@ export default class GameScene extends Phaser.Scene {
         // Create player
         this.player = new Player(this, this.scale.width / 2, this.scale.height - 50);
 
+        // XP Manager — apply perks before difficulty
+        this.xpManager = new XPManager();
+        const hpBonus = this.xpManager.getHPBonus();
+        const unlockedWeapons = this.xpManager.getUnlockedWeapons();
+        unlockedWeapons.forEach(w => this.player.unlockWeapon(w));
+
         // Apply difficulty to player health
+        let baseHealth = GAME_CONFIG.PLAYER_HEALTH;
+        if (hpBonus > 0) baseHealth = Math.floor(baseHealth * (1 + hpBonus));
         if (this.difficulty.healthMultiplier !== 1) {
-            this.player.maxHealth = Math.floor(GAME_CONFIG.PLAYER_HEALTH * this.difficulty.healthMultiplier);
-            this.player.health = this.player.maxHealth;
+            this.player.maxHealth = Math.floor(baseHealth * this.difficulty.healthMultiplier);
+        } else {
+            this.player.maxHealth = baseHealth;
         }
+        this.player.health = this.player.maxHealth;
 
         // Touch controls for mobile
         this.touchControls = null;
@@ -67,6 +80,16 @@ export default class GameScene extends Phaser.Scene {
         this.collectibles = this.physics.add.group();
         this.powerups = this.physics.add.group();
         this.bosses = this.physics.add.group();
+
+        // Hazards
+        this.hazards = [];
+
+        // Companion drone
+        this.drone = null;
+        this.droneUnlocked = !!localStorage.getItem('fortune-drone-unlocked');
+
+        // Edge warning arrows
+        this.edgeWarnings = [];
 
         // Kill milestone tracking
         this.totalKills = 0;
@@ -97,6 +120,11 @@ export default class GameScene extends Phaser.Scene {
 
         // Achievement manager
         this.achievementManager = new AchievementManager(this);
+
+        // Apply XP start perks
+        if (this.xpManager.startsWithShield()) {
+            this.applyPowerUp(POWERUP_TYPES.SHIELD);
+        }
 
         // Game session tracking
         this.gameStartTime = Date.now();
@@ -460,6 +488,120 @@ export default class GameScene extends Phaser.Scene {
 
         // --- Power-up indicators container ---
         this.powerUpIndicators = [];
+
+        // --- Weapon type display ---
+        this.weaponText = this.add.text(10, 128, 'BLASTER', {
+            fontSize: '14px',
+            fontFamily: 'monospace',
+            color: '#00ffff'
+        });
+        this.weaponText.setDepth(1000);
+
+        // --- Level display ---
+        const lvl = this.xpManager ? this.xpManager.getLevel() : 1;
+        this.levelText = this.add.text(this.scale.width - 150, 100, `Lv.${lvl}`, {
+            fontSize: '14px',
+            fontFamily: 'monospace',
+            color: '#ffd700'
+        });
+        this.levelText.setDepth(1000);
+        this.levelText.setOrigin(0, 0);
+
+        // --- Mini Radar ---
+        this.createRadar();
+
+        // --- Mobile weapon switch button ---
+        if (this.touchControls) {
+            this.createWeaponSwitchButton();
+        }
+    }
+
+    createRadar() {
+        const radarSize = 80;
+        const radarX = this.scale.width - radarSize / 2 - 10;
+        const radarY = radarSize / 2 + 120;
+
+        // Radar background
+        this.radarBg = this.add.circle(radarX, radarY, radarSize / 2, 0x000000, 0.5);
+        this.radarBg.setStrokeStyle(1, 0x00ff00, 0.5);
+        this.radarBg.setDepth(999);
+
+        this.radarCenter = { x: radarX, y: radarY };
+        this.radarSize = radarSize;
+        this.radarDots = [];
+    }
+
+    updateRadar() {
+        // Clean old dots
+        this.radarDots.forEach(d => { if (d) d.destroy(); });
+        this.radarDots = [];
+
+        const cx = this.radarCenter.x;
+        const cy = this.radarCenter.y;
+        const halfR = this.radarSize / 2;
+        const scaleX = halfR / (this.scale.width / 2);
+        const scaleY = halfR / (this.scale.height / 2);
+        const playerCX = this.scale.width / 2;
+        const playerCY = this.scale.height / 2;
+
+        // Player dot (green, center)
+        const playerDot = this.add.circle(cx, cy, 2, 0x00ff00, 1);
+        playerDot.setDepth(1000);
+        this.radarDots.push(playerDot);
+
+        // Helper to add a radar dot
+        const addDot = (worldX, worldY, color, size = 1.5) => {
+            const rx = cx + (worldX - this.player.x) * scaleX;
+            const ry = cy + (worldY - this.player.y) * scaleY;
+            // Only show if within radar circle
+            const dist = Phaser.Math.Distance.Between(rx, ry, cx, cy);
+            if (dist < halfR - 2) {
+                const dot = this.add.circle(rx, ry, size, color, 0.9);
+                dot.setDepth(1000);
+                this.radarDots.push(dot);
+            }
+        };
+
+        // Enemies (red)
+        this.enemies.children.entries.forEach(e => {
+            if (e && e.active) addDot(e.x, e.y, 0xff0000);
+        });
+
+        // Bosses (large red)
+        this.bosses.children.entries.forEach(b => {
+            if (b && b.active) addDot(b.x, b.y, 0xff0000, 3);
+        });
+
+        // Power-ups (blue)
+        this.powerups.children.entries.forEach(p => {
+            if (p && p.active && !p.collected) addDot(p.x, p.y, 0x4488ff);
+        });
+
+        // Collectibles (yellow)
+        this.collectibles.children.entries.forEach(c => {
+            if (c && c.active && !c.collected) addDot(c.x, c.y, 0xffff00, 1);
+        });
+    }
+
+    createWeaponSwitchButton() {
+        const btnX = this.scale.width - 60;
+        const btnY = this.scale.height - 60;
+
+        const btn = this.add.circle(btnX, btnY, 25, 0x333366, 0.7);
+        btn.setStrokeStyle(2, 0x00ffff, 0.8);
+        btn.setDepth(1000);
+        btn.setInteractive();
+
+        const label = this.add.text(btnX, btnY, 'W', {
+            fontSize: '18px', fontFamily: 'monospace', color: '#00ffff', fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(1001);
+
+        btn.on('pointerdown', () => {
+            if (this.player) this.player.cycleWeapon();
+        });
+
+        this.weaponSwitchBtn = btn;
+        this.weaponSwitchLabel = label;
     }
 
     updateUI() {
@@ -519,6 +661,13 @@ export default class GameScene extends Phaser.Scene {
             this.healthBarFill.setFillStyle(barColor);
 
             this.healthText.setText(`HP: ${this.player.health}/${this.player.maxHealth}`);
+        }
+
+        // Update weapon display
+        if (this.weaponText && this.player) {
+            const wConfig = WEAPON_CONFIG[this.player.currentWeapon];
+            this.weaponText.setText(`${wConfig.name} [Q]`);
+            this.weaponText.setColor(Phaser.Display.Color.IntegerToColor(wConfig.color).rgba);
         }
 
         // Update power-up indicators
@@ -790,6 +939,226 @@ export default class GameScene extends Phaser.Scene {
                 }
             }
         });
+
+        // --- LASER COLLISION ---
+        if (this.player && this.player.laserActive && this.player.laserGraphic) {
+            const laserX = this.player.x;
+            const laserW = WEAPON_CONFIG[WEAPON_TYPES.LASER].beamWidth * 2;
+            const dmg = WEAPON_CONFIG[WEAPON_TYPES.LASER].damagePerFrame;
+
+            this.enemies.children.entries.forEach(enemy => {
+                if (enemy && enemy.active) {
+                    if (Math.abs(enemy.x - laserX) < laserW + enemy.displayWidth / 2 && enemy.y < this.player.y) {
+                        enemy.takeDamage(dmg);
+                    }
+                }
+            });
+            this.bosses.children.entries.forEach(boss => {
+                if (boss && boss.active) {
+                    if (Math.abs(boss.x - laserX) < laserW + 30 && boss.y < this.player.y) {
+                        boss.takeDamage(dmg);
+                    }
+                }
+            });
+        }
+
+        // --- UPDATE HAZARDS ---
+        this.updateHazards();
+
+        // --- UPDATE DRONE ---
+        this.updateDrone(time);
+
+        // --- UPDATE EDGE WARNINGS ---
+        this.updateEdgeWarnings();
+
+        // --- UPDATE RADAR ---
+        this.updateRadar();
+
+        // --- DRONE BULLET COLLISIONS ---
+        if (this.drone && this.drone.alive && this.drone.bullets) {
+            const droneBullets = this.drone.bullets.children.entries.slice();
+            for (let i = droneBullets.length - 1; i >= 0; i--) {
+                const bullet = droneBullets[i];
+                if (!bullet || !bullet.active) continue;
+
+                // vs enemies
+                this.enemies.children.entries.forEach(enemy => {
+                    if (enemy && enemy.active && bullet.active) {
+                        const dist = Phaser.Math.Distance.Between(bullet.x, bullet.y, enemy.x, enemy.y);
+                        if (dist < 20) {
+                            bullet.destroy();
+                            enemy.takeDamage(DRONE_CONFIG.bulletDamage);
+                        }
+                    }
+                });
+
+                // vs bosses
+                if (bullet.active) {
+                    this.bosses.children.entries.forEach(boss => {
+                        if (boss && boss.active && bullet.active) {
+                            const dist = Phaser.Math.Distance.Between(bullet.x, bullet.y, boss.x, boss.y);
+                            if (dist < 40) {
+                                bullet.destroy();
+                                boss.takeDamage(DRONE_CONFIG.bulletDamage);
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    }
+
+    // --- HAZARD SYSTEM ---
+    spawnHazards(type) {
+        const config = HAZARD_CONFIG[type];
+
+        if (type === HAZARD_TYPES.ASTEROID) {
+            const count = Phaser.Math.Between(config.count.min, config.count.max);
+            for (let i = 0; i < count; i++) {
+                const x = Phaser.Math.Between(50, this.scale.width - 50);
+                const y = Phaser.Math.Between(-200, -50);
+                const hazard = new Hazard(this, x, y, type);
+                this.hazards.push(hazard);
+            }
+        } else if (type === HAZARD_TYPES.NEBULA) {
+            const count = Phaser.Math.Between(config.count.min, config.count.max);
+            for (let i = 0; i < count; i++) {
+                const x = Phaser.Math.Between(100, this.scale.width - 100);
+                const y = Phaser.Math.Between(-300, -100);
+                const hazard = new Hazard(this, x, y, type);
+                this.hazards.push(hazard);
+            }
+        }
+    }
+
+    updateHazards() {
+        const delta = this.game.loop.delta;
+
+        for (let i = this.hazards.length - 1; i >= 0; i--) {
+            const hazard = this.hazards[i];
+            const alive = hazard.update(delta);
+            if (!alive) {
+                this.hazards.splice(i, 1);
+                continue;
+            }
+
+            if (hazard.type === HAZARD_TYPES.ASTEROID) {
+                // Asteroid vs player
+                if (this.player && this.player.active && !this.player.invincible && !this.player.isDying) {
+                    if (hazard.overlapsSprite(this.player)) {
+                        this.player.takeDamage(HAZARD_CONFIG[HAZARD_TYPES.ASTEROID].playerDamage);
+                        this.waveDamageTaken = true;
+                    }
+                }
+
+                // Asteroid vs enemies
+                this.enemies.children.entries.forEach(enemy => {
+                    if (enemy && enemy.active && hazard.overlapsSprite(enemy)) {
+                        enemy.takeDamage(HAZARD_CONFIG[HAZARD_TYPES.ASTEROID].enemyDamage);
+                    }
+                });
+
+                // Asteroid blocks player bullets
+                const bullets = this.player.bullets.children.entries.slice();
+                for (let j = bullets.length - 1; j >= 0; j--) {
+                    const bullet = bullets[j];
+                    if (bullet && bullet.active && hazard.overlapsBullet(bullet)) {
+                        bullet.destroy();
+                    }
+                }
+            } else if (hazard.type === HAZARD_TYPES.NEBULA) {
+                // Nebula effects on player: speed boost
+                if (this.player && this.player.active && hazard.containsPoint(this.player.x, this.player.y)) {
+                    // Speed boost handled via temporary multiplier
+                    if (!this.player._nebulaBoost) {
+                        this.player._nebulaBoost = true;
+                        this.player._origSpeed = this.player.speed;
+                        this.player.speed = Math.floor(this.player.speed * HAZARD_CONFIG[HAZARD_TYPES.NEBULA].playerSpeedBoost);
+                    }
+                } else if (this.player && this.player._nebulaBoost) {
+                    this.player.speed = this.player._origSpeed;
+                    this.player._nebulaBoost = false;
+                }
+
+                // Nebula effects on enemies: partial invisibility
+                this.enemies.children.entries.forEach(enemy => {
+                    if (enemy && enemy.active) {
+                        if (hazard.containsPoint(enemy.x, enemy.y)) {
+                            enemy.setAlpha(HAZARD_CONFIG[HAZARD_TYPES.NEBULA].enemyAlpha);
+                        } else if (enemy.alpha < 1 && !enemy.frozen) {
+                            enemy.setAlpha(1);
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    // --- COMPANION DRONE ---
+    updateDrone(time) {
+        // Spawn drone at wave 15 or if purchased
+        if (!this.drone && (this.droneUnlocked || this.waveManager.getCurrentWave() >= 15)) {
+            this.drone = new Drone(this, this.player);
+            this.droneUnlocked = true;
+            localStorage.setItem('fortune-drone-unlocked', '1');
+        }
+
+        if (this.drone) {
+            if (this.drone.alive) {
+                this.drone.update(time);
+            }
+        }
+    }
+
+    respawnDrone() {
+        if (this.drone && !this.drone.alive) {
+            this.drone.respawn();
+        }
+    }
+
+    // --- EDGE WARNING ARROWS ---
+    updateEdgeWarnings() {
+        // Clean old arrows
+        this.edgeWarnings.forEach(a => { if (a) a.destroy(); });
+        this.edgeWarnings = [];
+
+        if (!this.player || !this.player.active) return;
+
+        const margin = 20;
+        const screenW = this.scale.width;
+        const screenH = this.scale.height;
+
+        // Check enemies above screen or near edges
+        this.enemies.children.entries.forEach(enemy => {
+            if (!enemy || !enemy.active) return;
+
+            // Off-screen top
+            if (enemy.y < -10 && enemy.y > -200) {
+                const arrowX = Phaser.Math.Clamp(enemy.x, margin, screenW - margin);
+                const alpha = Phaser.Math.Clamp(1 - (Math.abs(enemy.y) / 200), 0.3, 1);
+                const arrow = this.add.triangle(arrowX, 12, 0, 10, 6, 0, 12, 10, 0xff4444, alpha);
+                arrow.setDepth(998);
+                this.edgeWarnings.push(arrow);
+            }
+
+            // Off-screen left
+            if (enemy.x < -10 && enemy.x > -150) {
+                const arrowY = Phaser.Math.Clamp(enemy.y, margin, screenH - margin);
+                const alpha = Phaser.Math.Clamp(1 - (Math.abs(enemy.x) / 150), 0.3, 1);
+                const arrow = this.add.triangle(12, arrowY, 10, 0, 0, 6, 10, 12, 0xff4444, alpha);
+                arrow.setDepth(998);
+                this.edgeWarnings.push(arrow);
+            }
+
+            // Off-screen right
+            if (enemy.x > screenW + 10 && enemy.x < screenW + 150) {
+                const arrowY = Phaser.Math.Clamp(enemy.y, margin, screenH - margin);
+                const alpha = Phaser.Math.Clamp(1 - ((enemy.x - screenW) / 150), 0.3, 1);
+                const arrow = this.add.triangle(screenW - 12, arrowY, 0, 0, 10, 6, 0, 12, 0xff4444, alpha);
+                arrow.setDepth(998);
+                this.edgeWarnings.push(arrow);
+            }
+        });
     }
 
     onEnemyKilled(enemy) {
@@ -952,6 +1321,11 @@ export default class GameScene extends Phaser.Scene {
                 // Reset wave-specific bonus tracking
                 this.bonusSystem.resetWaveStats();
                 this.waveDamageTaken = false;
+
+                // Respawn drone if destroyed
+                if (this.drone && !this.drone.alive) {
+                    this.respawnDrone();
+                }
 
                 const nextWaveNum = currentWave + 1;
 
@@ -1611,8 +1985,33 @@ export default class GameScene extends Phaser.Scene {
             this.touchControls = null;
         }
 
-        // Gather all stats
+        // Clean up hazards
+        this.hazards.forEach(h => { if (h) h.destroy(); });
+        this.hazards = [];
+
+        // Clean up drone
+        if (this.drone) {
+            this.drone.destroy();
+            this.drone = null;
+        }
+
+        // Clean up edge warnings
+        this.edgeWarnings.forEach(a => { if (a) a.destroy(); });
+        this.edgeWarnings = [];
+
+        // Clean up radar
+        this.radarDots.forEach(d => { if (d) d.destroy(); });
+        this.radarDots = [];
+
+        // Award XP
         const finalScore = this.scoreManager.getScore();
+        if (this.xpManager) {
+            const xpResult = this.xpManager.addXP(finalScore);
+            // Pass XP data to game over scene
+            this._xpResult = xpResult;
+        }
+
+        // Gather all stats
         const maxCombo = this.scoreManager.getMaxCombo();
         const timePlayed = Date.now() - this.gameStartTime;
         const achievementsUnlocked = this.achievementManager ? this.achievementManager.getSessionUnlocked() : [];
@@ -1625,7 +2024,8 @@ export default class GameScene extends Phaser.Scene {
             accuracy: this.bonusSystem.getAccuracyPercent(),
             powerupsCollected: this.powerupsCollected,
             timePlayed: timePlayed,
-            achievementsUnlocked: achievementsUnlocked
+            achievementsUnlocked: achievementsUnlocked,
+            xpResult: this._xpResult || null
         });
     }
 }

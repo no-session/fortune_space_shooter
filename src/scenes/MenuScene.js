@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import ChatBox from '../ui/ChatBox.js';
 import DailyChallenge from '../managers/DailyChallenge.js';
+import XPManager from '../managers/XPManager.js';
 import { SHIP_SKINS, DIFFICULTY_MODES } from '../utils/constants.js';
 
 export default class MenuScene extends Phaser.Scene {
@@ -41,6 +42,9 @@ export default class MenuScene extends Phaser.Scene {
 
         // Daily challenge banner
         this.createDailyChallengeBanner(width, height);
+
+        // XP and level display
+        this.createXPDisplay(width, height);
 
         // Add version text
         this.add.text(width - 10, height - 10, 'v1.0', {
@@ -165,6 +169,53 @@ export default class MenuScene extends Phaser.Scene {
                 repeat: -1
             });
         }
+    }
+
+    createXPDisplay(width, height) {
+        const xpManager = new XPManager();
+        const level = xpManager.getLevel();
+        const xp = xpManager.getXP();
+        const progress = xpManager.getXPProgress();
+        const nextReq = xpManager.getXPForNextLevel();
+        const title = xpManager.getTitle();
+
+        const xpY = height - 90;
+
+        // Level text
+        let levelStr = `Lv.${level}`;
+        if (title) levelStr += ` - ${title}`;
+
+        const lvlText = this.add.text(width / 2, xpY - 12, levelStr, {
+            fontSize: '16px',
+            fontFamily: 'monospace',
+            color: '#ffd700',
+            fontStyle: 'bold'
+        });
+        lvlText.setOrigin(0.5);
+        lvlText.setDepth(12);
+
+        // XP bar background
+        const barWidth = 200;
+        const barHeight = 8;
+        const barX = width / 2 - barWidth / 2;
+
+        const barBg = this.add.rectangle(width / 2, xpY + 6, barWidth, barHeight, 0x333333);
+        barBg.setDepth(12);
+
+        // XP bar fill
+        const fillWidth = Math.max(1, barWidth * progress);
+        const barFill = this.add.rectangle(barX + fillWidth / 2, xpY + 6, fillWidth, barHeight, 0xffd700);
+        barFill.setDepth(13);
+
+        // XP text
+        const xpStr = nextReq !== null ? `${xp} / ${nextReq} XP` : `${xp} XP (MAX)`;
+        const xpText = this.add.text(width / 2, xpY + 18, xpStr, {
+            fontSize: '11px',
+            fontFamily: 'monospace',
+            color: '#888888'
+        });
+        xpText.setOrigin(0.5);
+        xpText.setDepth(12);
     }
 
     createTitle(width, height) {

@@ -14,6 +14,7 @@ export default class GameOverScene extends Phaser.Scene {
         this.powerupsCollected = data.powerupsCollected || 0;
         this.timePlayed = data.timePlayed || 0;
         this.achievementsUnlocked = data.achievementsUnlocked || [];
+        this.xpResult = data.xpResult || null;
     }
 
     create() {
@@ -81,6 +82,14 @@ export default class GameOverScene extends Phaser.Scene {
         if (this.achievementsUnlocked.length > 0) {
             const achievementStr = this.achievementsUnlocked.map(a => a.icon).join(' ');
             stats.push({ label: 'Achievements', value: achievementStr, color: '#ffd700', size: '18px' });
+        }
+
+        // XP info
+        if (this.xpResult) {
+            stats.push({ label: 'XP Earned', value: `+${this.xpResult.xpGained}`, color: '#ffd700', size: '18px' });
+            if (this.xpResult.leveledUp) {
+                stats.push({ label: 'LEVEL UP!', value: `Lv.${this.xpResult.newLevel}`, color: '#00ff00', size: '22px' });
+            }
         }
 
         // Animate stats appearing one by one

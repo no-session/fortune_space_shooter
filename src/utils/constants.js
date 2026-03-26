@@ -309,6 +309,97 @@ export const COMBO_ANNOUNCEMENTS = [
     { combo: 30, text: 'GOD MODE!', color: 'rainbow', size: '56px', shake: true }
 ];
 
+// Weapon Types
+export const WEAPON_TYPES = {
+    BLASTER: 'blaster',
+    LASER: 'laser',
+    WAVE: 'wave'
+};
+
+export const WEAPON_CONFIG = {
+    [WEAPON_TYPES.BLASTER]: {
+        name: 'BLASTER',
+        color: 0x00ffff,
+        description: 'Classic spread shots'
+    },
+    [WEAPON_TYPES.LASER]: {
+        name: 'LASER',
+        color: 0xff4444,
+        damagePerFrame: 2,
+        beamWidth: 4,
+        description: 'Continuous beam'
+    },
+    [WEAPON_TYPES.WAVE]: {
+        name: 'WAVE',
+        color: 0x44ff44,
+        frequency: 5,
+        amplitude: 80,
+        description: 'Sine-wave bullets'
+    }
+};
+
+// Environmental Hazards
+export const HAZARD_TYPES = {
+    ASTEROID: 'asteroid',
+    NEBULA: 'nebula'
+};
+
+export const HAZARD_CONFIG = {
+    [HAZARD_TYPES.ASTEROID]: {
+        count: { min: 5, max: 8 },
+        speed: { min: 30, max: 80 },
+        size: { min: 20, max: 40 },
+        color: 0x555555,
+        playerDamage: 15,
+        enemyDamage: 30
+    },
+    [HAZARD_TYPES.NEBULA]: {
+        count: { min: 2, max: 3 },
+        width: { min: 120, max: 200 },
+        height: { min: 150, max: 250 },
+        speed: 40,
+        playerSpeedBoost: 1.3,
+        enemyAlpha: 0.4,
+        colors: [0x6622aa, 0x2244bb, 0x4411aa]
+    }
+};
+
+// Companion Drone
+export const DRONE_CONFIG = {
+    orbitDistance: 60,
+    orbitSpeed: 2,
+    fireInterval: 1500,
+    bulletDamage: 5,
+    health: 20,
+    shopCost: 80,
+    bulletSpeed: 500,
+    color: 0x44aaff
+};
+
+// XP and Leveling
+export const XP_CONFIG = {
+    SCORE_TO_XP_DIVISOR: 10,
+    LEVELS: [
+        { level: 1, xpRequired: 0 },
+        { level: 2, xpRequired: 100 },
+        { level: 3, xpRequired: 300 },
+        { level: 4, xpRequired: 600 },
+        { level: 5, xpRequired: 1000 },
+        { level: 6, xpRequired: 1500 },
+        { level: 7, xpRequired: 2200 },
+        { level: 8, xpRequired: 3000 },
+        { level: 9, xpRequired: 4000 },
+        { level: 10, xpRequired: 5500 }
+    ],
+    PERKS: {
+        2: { type: 'unlock_weapon', weapon: 'wave', description: 'Wave weapon unlocked!' },
+        3: { type: 'unlock_weapon', weapon: 'laser', description: 'Laser weapon unlocked!' },
+        5: { type: 'hp_bonus', value: 0.10, description: '+10% starting HP!' },
+        7: { type: 'start_shield', description: 'Start with shield!' },
+        10: { type: 'title', title: 'Space Ace', description: 'Title: Space Ace!' }
+    }
+};
+
 // Boss Types
 export const BOSS_TYPES = {
     MOTHERSHIP: 'mothership',

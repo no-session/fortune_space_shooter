@@ -1,4 +1,4 @@
-import { FORMATION_TYPES, ENEMY_TYPES, BOSS_WAVE_SEQUENCE } from '../utils/constants.js';
+import { FORMATION_TYPES, ENEMY_TYPES, BOSS_WAVE_SEQUENCE, HAZARD_TYPES } from '../utils/constants.js';
 
 export default class WaveManager {
     constructor(scene) {
@@ -14,10 +14,24 @@ export default class WaveManager {
         this.waveComplete = false;
         this.bossWave = waveNumber % 5 === 0 && waveNumber > 0;
 
+        // Spawn environmental hazards on certain waves
+        this.maybeSpawnHazards();
+
         if (this.bossWave) {
             this.startBossWave();
         } else {
             this.startNormalWave();
+        }
+    }
+
+    maybeSpawnHazards() {
+        // Spawn hazards on waves 7, 14, 21, 28, ...
+        if (this.currentWave >= 7 && this.currentWave % 7 === 0 && this.scene.spawnHazards) {
+            // Alternate between asteroid and nebula
+            const hazardType = (this.currentWave / 7) % 2 === 1
+                ? HAZARD_TYPES.ASTEROID
+                : HAZARD_TYPES.NEBULA;
+            this.scene.spawnHazards(hazardType);
         }
     }
 

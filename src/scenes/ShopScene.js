@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
+import { DRONE_CONFIG } from '../utils/constants.js';
 
 const UPGRADE_ICONS = {
     'Weapon Upgrade': { emoji: 'W', color: 0xff4444 },
     'Speed Upgrade':  { emoji: 'S', color: 0x44ff44 },
     'Health Boost':   { emoji: '+', color: 0x44ddff },
     'Extra Life':     { emoji: 'L', color: 0xffdd00 },
-    'Lucky Spin':     { emoji: '?', color: 0xff88ff }
+    'Lucky Spin':     { emoji: '?', color: 0xff88ff },
+    'Companion Drone': { emoji: 'D', color: 0x44aaff }
 };
 
 const SPIN_RESULTS = [
@@ -79,7 +81,8 @@ export default class ShopScene extends Phaser.Scene {
             { name: 'Speed Upgrade',  cost: 30, description: 'Move faster around the screen', maxCheck: () => gameScene?.player?.speed >= 500 },
             { name: 'Health Boost',   cost: 40, description: 'Restore all your health', maxCheck: () => false },
             { name: 'Extra Life',     cost: 100, description: 'One more chance to survive', maxCheck: () => false },
-            { name: 'Lucky Spin',     cost: 25, description: 'Spin for a mystery reward!', maxCheck: () => false }
+            { name: 'Lucky Spin',     cost: 25, description: 'Spin for a mystery reward!', maxCheck: () => false },
+            { name: 'Companion Drone', cost: DRONE_CONFIG.shopCost, description: 'Auto-firing buddy that orbits you!', maxCheck: () => !!localStorage.getItem('fortune-drone-unlocked') || (gameScene && gameScene.drone) }
         ];
 
         this.upgradeButtons = [];
@@ -210,6 +213,9 @@ export default class ShopScene extends Phaser.Scene {
                 gameScene.player.heal(100);
             } else if (name === 'Extra Life') {
                 gameScene.player.lives++;
+            } else if (name === 'Companion Drone') {
+                gameScene.droneUnlocked = true;
+                localStorage.setItem('fortune-drone-unlocked', '1');
             }
         }
     }
