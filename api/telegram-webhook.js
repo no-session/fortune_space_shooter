@@ -1,19 +1,12 @@
-import { readFileSync, writeFileSync } from 'fs';
+import { Redis } from '@upstash/redis';
 
-const MESSAGES_FILE = '/tmp/chat-messages.json';
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL,
+  token: process.env.KV_REST_API_TOKEN,
+});
+
+const CHAT_KEY = 'fortune-chat-messages';
 const ALLOWED_CHAT_ID = process.env.NOTIFY_CHAT_ID || '6927192277';
-
-function readMessages() {
-  try {
-    return JSON.parse(readFileSync(MESSAGES_FILE, 'utf8'));
-  } catch {
-    return [];
-  }
-}
-
-function writeMessages(messages) {
-  writeFileSync(MESSAGES_FILE, JSON.stringify(messages));
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -28,18 +21,20 @@ export default async function handler(req, res) {
   }
 
   // Only accept messages from Dad's chat
-  const chatId = String(msg.chat?.id);
+  const chatId = String(msg.chat?.id || '');
   if (chatId !== String(ALLOWED_CHAT_ID)) {
     return res.status(200).json({ ok: true });
   }
 
-  const messages = readMessages();
-  messages.push({
+  // Store message in Redis (expires in 1 hour)
+  const chatMessage = JSON.stringify({
     from: 'papa',
     text: msg.text,
     timestamp: Date.now()
   });
-  writeMessages(messages);
+
+  await redis.rpush(CHAT_KEY, chatMessage).catch(() => {});
+  await redis.expire(CHAT_KEY, 3600).catch(() => {}); // 1 hour TTL
 
   return res.status(200).json({ ok: true });
 }
