@@ -23,6 +23,7 @@ export default class WaveManager {
         this.currentWave = waveNumber;
         this.waveComplete = false;
         this.activeModifier = null;
+        this.formationsSpawning = 0;
 
         // Endless mode boss logic: mini-boss every 5, full boss every 10, double boss every 20
         if (this.endlessMode) {
