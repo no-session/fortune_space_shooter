@@ -95,15 +95,21 @@ export default class BootScene extends Phaser.Scene {
     loadSpaceRageAssets() {
         const basePath = 'assets/sprites/SpaceRage';
         
-        // Background
+        // Backgrounds
         this.load.image('background', `${basePath}/BG.png`);
-        
-        // Player ship frames (blue variant)
-        this.load.image('player_l2', `${basePath}/Player/player_b_l2.png`);
-        this.load.image('player_l1', `${basePath}/Player/player_b_l1.png`);
-        this.load.image('player_m', `${basePath}/Player/player_b_m.png`);
-        this.load.image('player_r1', `${basePath}/Player/player_b_r1.png`);
-        this.load.image('player_r2', `${basePath}/Player/player_b_r2.png`);
+        this.load.image('bg_subtle', `${basePath}/NewBackgrounds/bg_nebula_subtle.png`);
+        this.load.image('bg_dense', `${basePath}/NewBackgrounds/bg_starfield_dense.png`);
+        this.load.image('bg_intense', `${basePath}/NewBackgrounds/bg_nebula_intense.png`);
+
+        // Player ship frames — new purple ship (no banking variants in source asset,
+        // so all 5 banking texture keys point to the same sprite)
+        const newPlayer = `${basePath}/NewPlayer/player_main.png`;
+        this.load.image('player_l2', newPlayer);
+        this.load.image('player_l1', newPlayer);
+        this.load.image('player_m', newPlayer);
+        this.load.image('player_r1', newPlayer);
+        this.load.image('player_r2', newPlayer);
+        this.load.image('player_debris', `${basePath}/NewPlayer/player_debris.png`);
         
         // Enemy Type 1 (Scout - green variant)
         this.load.image('enemy_scout_l2', `${basePath}/Enemies/enemy_1_g_l2.png`);

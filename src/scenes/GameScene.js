@@ -66,15 +66,27 @@ export default class GameScene extends Phaser.Scene {
     }
 
     createStarfield() {
-        // Add scrolling background image
-        this.bg1 = this.add.image(this.scale.width / 2, this.scale.height / 2, 'background');
+        const initialBg = this.getBackgroundKeyForWave(1);
+        this.bg1 = this.add.image(this.scale.width / 2, this.scale.height / 2, initialBg);
         this.bg1.setDisplaySize(this.scale.width, this.scale.height);
         this.bg1.setDepth(0);
-        
-        this.bg2 = this.add.image(this.scale.width / 2, -this.scale.height / 2, 'background');
+
+        this.bg2 = this.add.image(this.scale.width / 2, -this.scale.height / 2, initialBg);
         this.bg2.setDisplaySize(this.scale.width, this.scale.height);
         this.bg2.setDepth(0);
-        
+
+        // Dark overlay to improve gameplay visibility. New backgrounds are already dark,
+        // so use a lighter overlay than the old BG.png needed.
+        this.darkOverlay = this.add.rectangle(
+            this.scale.width / 2,
+            this.scale.height / 2,
+            this.scale.width,
+            this.scale.height,
+            0x000000,
+            0.25
+        );
+        this.darkOverlay.setDepth(0.5);
+
         this.bgSpeed = 50;
         
         // Create additional star layers for parallax effect on top
@@ -125,6 +137,24 @@ export default class GameScene extends Phaser.Scene {
                 }
             });
         });
+    }
+
+    getBackgroundKeyForWave(wave) {
+        if (wave > 0 && wave % 5 === 0) return 'bg_intense';
+        if (wave >= 5) return 'bg_dense';
+        return 'bg_subtle';
+    }
+
+    setBackgroundForWave(wave) {
+        const key = this.getBackgroundKeyForWave(wave);
+        if (this.bg1 && this.bg1.texture.key !== key) {
+            this.bg1.setTexture(key);
+            this.bg1.setDisplaySize(this.scale.width, this.scale.height);
+        }
+        if (this.bg2 && this.bg2.texture.key !== key) {
+            this.bg2.setTexture(key);
+            this.bg2.setDisplaySize(this.scale.width, this.scale.height);
+        }
     }
 
     setupCollisions() {
@@ -636,6 +666,7 @@ export default class GameScene extends Phaser.Scene {
                     // Start the next wave first to prevent re-triggering
                     this.waveManager.startWave(currentWave + 1);
                     this.bonusSystem.startWave(currentWave + 1);
+                    this.setBackgroundForWave(currentWave + 1);
                     this.waveTransitioning = false;
 
                     // Then launch shop
@@ -648,6 +679,7 @@ export default class GameScene extends Phaser.Scene {
                     // Start next wave
                     this.waveManager.startWave(currentWave + 1);
                     this.bonusSystem.startWave(currentWave + 1);
+                    this.setBackgroundForWave(currentWave + 1);
                     this.waveTransitioning = false;
                 }
             }

@@ -9,7 +9,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         scene.physics.add.existing(this);
         
         this.setCollideWorldBounds(true);
-        this.setScale(0.8);
+        this.setScale(0.5);
         this.setDepth(100);
         
         // Player stats
